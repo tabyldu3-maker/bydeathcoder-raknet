@@ -4653,7 +4653,12 @@ namespace RakNet
 							ParseConnectionRequestPacket(remoteSystem, playerId, (const char*)data, byteSize);
 							delete [] data;
 						}
-						else if ((unsigned char)(data)[0] != ID_AUTH_KEY || !ParseConnectionAuthPacket(remoteSystem, playerId, data, byteSize))
+						else if ((unsigned char)(data)[0] == ID_AUTH_KEY)
+						{
+							// AUTH_KEY flow is disabled - ignore this packet.
+							delete[] data;
+						}
+						else
 						{
 							if ((unsigned char)(data)[0] == ID_RPC && remoteSystem->sampData.unverifiedRPCs++ < MAX_UNVERIFIED_RPCS)
 							{

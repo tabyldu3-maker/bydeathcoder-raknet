@@ -379,6 +379,10 @@ int SocketLayer::RecvFrom( const SOCKET s, RakPeer *rakPeer, int *errorCode )
 		unsigned short portnum;
 		portnum = ntohs( sa.sin_port );
 		uint8_t* decrypted = SAMPRakNet::Decrypt((uint8_t*)data, len, SAMPRakNet::GetPort());
+		if (decrypted && len > 0 && SAMPRakNet::GetCore())
+		{
+			SAMPRakNet::GetCore()->printLn("[CLIENT] packet: 0x%02X", decrypted[0]);
+		}
 		ProcessNetworkPacket(sa.sin_addr.s_addr, portnum, (char*)decrypted, len, rakPeer);
 #ifdef _DEBUG
 		if (decrypted == nullptr) {
@@ -454,6 +458,10 @@ int SocketLayer::SendTo( SOCKET s, const char *data, int length, unsigned int bi
 	do
 	{
 		// TODO - use WSASendTo which is faster.
+		if (length > 0 && SAMPRakNet::GetCore())
+		{
+			SAMPRakNet::GetCore()->printLn("[SEND] packet: 0x%02X", (unsigned char)data[0]);
+		}
 		len = sendto(s, data, length, 0, (const sockaddr*)&sa, sizeof(struct sockaddr_in));
 	}
 	while ( len == 0 );
