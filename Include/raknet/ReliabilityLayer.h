@@ -43,8 +43,13 @@ namespace RakNet
 	/// Sizeof an UDP header in byte
 	#define UDP_HEADER_SIZE 28
 
+<<<<<<< HEAD
 	/// Number of ordered streams available. You can use up to 16 ordered streams
 	#define NUMBER_OF_ORDERED_STREAMS 16 // 2^4
+=======
+	/// Number of ordered streams available. You can use up to 32 ordered streams
+	#define NUMBER_OF_ORDERED_STREAMS 32 // 2^5
+>>>>>>> 8872e30 (upload all filesss)
 
 	#define RESEND_TREE_ORDER 32
 
@@ -112,7 +117,11 @@ namespace RakNet
 		/// \param[in] numberOfBitsToSend The length of \a data in bits
 		/// \param[in] priority The priority level for the send
 		/// \param[in] reliability The reliability type for the send
+<<<<<<< HEAD
 		/// \param[in] orderingChannel 0 to 15.  Specifies what channel to use, for relational ordering and sequencing of packets.
+=======
+		/// \param[in] orderingChannel 0 to 31.  Specifies what channel to use, for relational ordering and sequencing of packets.
+>>>>>>> 8872e30 (upload all filesss)
 		/// \param[in] makeDataCopy If true \a data will be copied.  Otherwise, only a pointer will be stored.
 		/// \param[in] MTUSize maximum datagram size
 		/// \param[in] currentTime Current time, as per RakNet::GetTime()

@@ -22,7 +22,11 @@ typedef int SOCKET;
 #define MAXIMUM_MTU_SIZE 1500
 #endif
 
+<<<<<<< HEAD
 #define MAX_AUTH_RESPONSE_LEN (260)
+=======
+#define MAX_AUTH_RESPONSE_LEN (64)
+>>>>>>> 8872e30 (upload all filesss)
 
 #include "../../Server/Components/LegacyNetwork/Query/query.hpp"
 
@@ -104,11 +108,15 @@ public:
 	}
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 	static uint8_t* Decrypt(uint8_t const* src, int len, uint16_t port);
 =======
 	static uint8_t* Decrypt(uint8_t const* src, int len);
 	static uint8_t* EncryptLegacy(uint8_t const* src, int len);
 >>>>>>> 1f00a6e (Первый коммит)
+=======
+	static uint8_t* Decrypt(uint8_t const* src, int len);
+>>>>>>> 8872e30 (upload all filesss)
 	static uint8_t* Encrypt(const OmpPlayerEncryptionData* encryptionData, uint8_t const* src, int len);
 
 	static uint16_t GetPort();

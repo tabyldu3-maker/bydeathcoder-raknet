@@ -1661,9 +1661,15 @@ int ReliabilityLayer::GetBitStreamHeaderLength( const InternalPacket *const inte
 	bitLength=sizeof(MessageNumberType)*2*8;
 
 #if RAKNET_LEGACY
+<<<<<<< HEAD
 	// Write the PacketReliability.  This is encoded in 3 bits
 	//bitStream->DoWriteBits((unsigned char*)&(internalPacket->reliability), 3, true);
 	bitLength += 3;
+=======
+	// Write the PacketReliability.  This is encoded in 4 bits
+	//bitStream->DoWriteBits((unsigned char*)&(internalPacket->reliability), 4, true);
+	bitLength += 4;
+>>>>>>> 8872e30 (upload all filesss)
 #else
 	// Write the PacketReliability.  This is encoded in 3 bits
 	//bitStream->DoWriteBits((unsigned char*)&(internalPacket->reliability), 3, true);
@@ -1673,9 +1679,15 @@ int ReliabilityLayer::GetBitStreamHeaderLength( const InternalPacket *const inte
 	// If the reliability requires an ordering channel and ordering index, we Write those.
 	if ( internalPacket->reliability == UNRELIABLE_SEQUENCED || internalPacket->reliability == RELIABLE_SEQUENCED || internalPacket->reliability == RELIABLE_ORDERED )
 	{
+<<<<<<< HEAD
 		// ordering channel encoded in 4 bits (from 0 to 15)
 		//bitStream->DoWriteBits((unsigned char*)&(internalPacket->orderingChannel), 4, true);
 		bitLength+=4;
+=======
+		// ordering channel encoded in 5 bits (from 0 to 31)
+		//bitStream->DoWriteBits((unsigned char*)&(internalPacket->orderingChannel), 5, true);
+		bitLength+=5;
+>>>>>>> 8872e30 (upload all filesss)
 
 		// ordering index is one byte
 		//bitStream->WriteCompressed(internalPacket->orderingIndex);
@@ -1742,8 +1754,13 @@ int ReliabilityLayer::WriteToBitStreamFromInternalPacket( RakNet::BitStream *bit
 
 
 #if RAKNET_LEGACY
+<<<<<<< HEAD
 	// Write the PacketReliability.  This is encoded in 3 bits
 	bitStream->WriteBits( (const unsigned char *)&c, 3, true );
+=======
+	// Write the PacketReliability.  This is encoded in 4 bits
+	bitStream->WriteBits( (const unsigned char *)&c, 4, true );
+>>>>>>> 8872e30 (upload all filesss)
 #else
 	// Write the PacketReliability.  This is encoded in 3 bits
 	bitStream->DoWriteBits( (const unsigned char *)&c, 3, true );
@@ -1752,8 +1769,13 @@ int ReliabilityLayer::WriteToBitStreamFromInternalPacket( RakNet::BitStream *bit
 	// If the reliability requires an ordering channel and ordering index, we Write those.
 	if ( internalPacket->reliability == UNRELIABLE_SEQUENCED || internalPacket->reliability == RELIABLE_SEQUENCED || internalPacket->reliability == RELIABLE_ORDERED )
 	{
+<<<<<<< HEAD
 		// ordering channel encoded in 4 bits (from 0 to 15)
 		bitStream->WriteBits( ( unsigned char* ) & ( internalPacket->orderingChannel ), 4, true );
+=======
+		// ordering channel encoded in 5 bits (from 0 to 31)
+		bitStream->WriteBits( ( unsigned char* ) & ( internalPacket->orderingChannel ), 5, true );
+>>>>>>> 8872e30 (upload all filesss)
 
 		// One or two bytes
 		bitStream->Write( internalPacket->orderingIndex );
@@ -1837,10 +1859,17 @@ InternalPacket* ReliabilityLayer::CreateInternalPacketFromBitStream( RakNet::Bit
 	}
 
 #if RAKNET_LEGACY
+<<<<<<< HEAD
 	// Read the PacketReliability. This is encoded in 3 bits
 	unsigned char reliability;
 
 	bitStreamSucceeded = bitStream->ReadBits( ( unsigned char* ) ( &( reliability ) ), 3 );
+=======
+	// Read the PacketReliability. This is encoded in 4 bits
+	unsigned char reliability;
+
+	bitStreamSucceeded = bitStream->ReadBits( ( unsigned char* ) ( &( reliability ) ), 4 );
+>>>>>>> 8872e30 (upload all filesss)
 #else
 	// Read the PacketReliability. This is encoded in 3 bits
 	unsigned char reliability;
@@ -1864,6 +1893,7 @@ InternalPacket* ReliabilityLayer::CreateInternalPacketFromBitStream( RakNet::Bit
 	// If the reliability requires an ordering channel and ordering index, we read those.
 	if ( internalPacket->reliability == UNRELIABLE_SEQUENCED || internalPacket->reliability == RELIABLE_SEQUENCED || internalPacket->reliability == RELIABLE_ORDERED )
 	{
+<<<<<<< HEAD
 		// Compatibility path: some clients write ordering data as
 		// orderingIndex(16) followed by orderingChannel(5).
 		// Prefer that format, then fall back to RakNet default channel(4)+index(16).
@@ -1911,6 +1941,32 @@ InternalPacket* ReliabilityLayer::CreateInternalPacketFromBitStream( RakNet::Bit
 				internalPacketPool.ReleasePointer( internalPacket );
 				return 0;
 			}
+=======
+		// ordering channel encoded in 5 bits (from 0 to 31)
+		bitStreamSucceeded = bitStream->ReadBits( ( unsigned char* ) & ( internalPacket->orderingChannel ), 5 );
+#ifdef _DEBUG
+		// 10/08/05 - Disabled assert since this hits from offline packets
+		//RakAssert( bitStreamSucceeded );
+#endif
+
+		if ( bitStreamSucceeded == false )
+		{
+			internalPacketPool.ReleasePointer( internalPacket );
+			return 0;
+		}
+
+		bitStreamSucceeded = bitStream->Read( internalPacket->orderingIndex );
+
+#ifdef _DEBUG
+		// 10/08/05 - Disabled assert since this hits from offline packets
+		//RakAssert( bitStreamSucceeded );
+#endif
+
+		if ( bitStreamSucceeded == false )
+		{
+			internalPacketPool.ReleasePointer( internalPacket );
+			return 0;
+>>>>>>> 8872e30 (upload all filesss)
 		}
 	}
 

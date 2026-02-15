@@ -41,7 +41,11 @@ namespace RakNet
 		#define RAKNET_LEGACY 0
 	#endif
 	#if RAKNET_LEGACY
+<<<<<<< HEAD
 		typedef unsigned short RPCID;
+=======
+		typedef unsigned char RPCID;
+>>>>>>> 8872e30 (upload all filesss)
 		#define RPCID_STRING 0
 	#else
 		typedef char * RPCID;
@@ -268,3 +272,7 @@ namespace RakNet
 }
 
 #endif
+<<<<<<< HEAD
+=======
+
+>>>>>>> 8872e30 (upload all filesss)

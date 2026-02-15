@@ -902,6 +902,7 @@ Packet* RakPeer::Receive( void )
 	Packet *packet = ReceiveIgnoreRPC();
 	while (packet && (packet->data[ 0 ] == ID_RPC || (packet->length>sizeof(unsigned char)+sizeof(RakNetTime) && packet->data[0]==ID_TIMESTAMP && packet->data[sizeof(unsigned char)+sizeof(RakNetTime)]==ID_RPC)))
 	{
+<<<<<<< HEAD
 		if (SAMPRakNet::GetCore())
 		{
 			const unsigned int rpcOffset =
@@ -916,6 +917,8 @@ Packet* RakPeer::Receive( void )
 				(unsigned int)(unsigned char)packet->data[rpcOffset]);
 		}
 
+=======
+>>>>>>> 8872e30 (upload all filesss)
 		// Do RPC calls from the user thread, not the network update thread
 		// If we are currently blocking on an RPC reply, send ID_RPC to the blocker to handle rather than handling RPCs automatically
 		HandleRPCPacket( ( char* ) packet->data, packet->length, packet->playerId, packet->playerIndex );
@@ -1184,7 +1187,11 @@ bool RakPeer::RPC( RPCID  uniqueID, const char *data, unsigned int bitLength, Pa
 #if RPCID_STRING
 	RakAssert( uniqueID[ 0 ] );
 #endif
+<<<<<<< HEAD
 	RakAssert(orderingChannel >=0 && orderingChannel < NUMBER_OF_ORDERED_STREAMS);
+=======
+	RakAssert(orderingChannel >=0 && orderingChannel < 32);
+>>>>>>> 8872e30 (upload all filesss)
 
 	if ( uniqueID == 0 )
 		return false;
@@ -1290,9 +1297,13 @@ bool RakPeer::RPC( RPCID  uniqueID, const char *data, unsigned int bitLength, Pa
 			stringCompressor->EncodeString(uniqueID, 256, &outgoingBitStream);
 		}
 #else
+<<<<<<< HEAD
 		// Legacy compatibility: client uses 9-bit numeric RPC IDs (supports >255).
 		const unsigned short rpcId9 = (unsigned short) uniqueID;
 		outgoingBitStream.WriteBits((const unsigned char*)&rpcId9, 9, true);
+=======
+		outgoingBitStream.Write(uniqueID);
+>>>>>>> 8872e30 (upload all filesss)
 #endif
 #if !RAKNET_LEGACY
 		outgoingBitStream.Write((bool) ((replyFromTarget!=0)==true));
@@ -2739,6 +2750,7 @@ void RakPeer::AcceptConnectionRequest(RakPeer::RemoteSystemStruct* remoteSystem)
 	remoteSystem->connectMode = RemoteSystemStruct::HANDLING_CONNECTION_REQUEST;
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 	RakNet::BitStream bitStream(sizeof(unsigned char) + sizeof(unsigned int) + sizeof(unsigned int) + sizeof(unsigned short));
 =======
 	// Compatibility mode: send 11 bytes total.
@@ -2784,6 +2796,43 @@ bool RakPeer::ParseConnectionAuthPacket(RakPeer::RemoteSystemStruct* remoteSyste
 	(void)byteSize;
 	// Compatibility mode: AUTH_KEY validation is disabled.
 	AcceptConnectionRequest(remoteSystem);
+=======
+	RakNet::BitStream bitStream(sizeof(unsigned char) + sizeof(unsigned int) + sizeof(unsigned short) + sizeof(unsigned int));
+	bitStream.Write((unsigned char)ID_CONNECTION_REQUEST_ACCEPTED);
+	bitStream.Write(remoteSystem->playerId.binaryAddress);
+	bitStream.Write(remoteSystem->playerId.port);
+	bitStream.Write(SAMPRakNet::GetToken());
+
+	SendImmediate((char*)bitStream.GetData(), bitStream.GetNumberOfBitsUsed(), SYSTEM_PRIORITY, RELIABLE, 0, remoteSystem->playerId, false, false, RakNet::GetTime());
+}
+
+bool RakPeer::ParseConnectionAuthPacket(RakPeer::RemoteSystemStruct* remoteSystem, PlayerID playerId, unsigned char* data, int byteSize) {
+	if (playerId == UNASSIGNED_PLAYER_ID) {
+		return false;
+	}
+
+	char auth[MAX_AUTH_RESPONSE_LEN] = { 0 };
+	uint8_t responseLen = 0;
+
+	RakNet::BitStream bs(data, byteSize, false);
+	bs.IgnoreBits(8);
+	bs.Read<uint8_t>(responseLen);
+	if (responseLen < sizeof(auth) && bs.Read(auth, responseLen)) {
+		StringView authStr(auth, responseLen);
+		if (authStr == StringView("NPC", 4)) {
+			remoteSystem->sampData.authType = SAMPRakNet::AuthType_NPC;
+			AcceptConnectionRequest(remoteSystem);
+			return true;
+		}
+		else if (SAMPRakNet::CheckAuth(remoteSystem->sampData.authIndex, authStr)) {
+			remoteSystem->sampData.authType = SAMPRakNet::AuthType_Player;
+			AcceptConnectionRequest(remoteSystem);
+			return true;
+		}
+	}
+
+	remoteSystem->connectMode = RemoteSystemStruct::DISCONNECT_ASAP_SILENTLY;
+>>>>>>> 8872e30 (upload all filesss)
 	return true;
 }
 
@@ -2791,6 +2840,9 @@ bool RakPeer::ParseConnectionAuthPacket(RakPeer::RemoteSystemStruct* remoteSyste
 void RakPeer::OnConnectionRequest( RakPeer::RemoteSystemStruct *remoteSystem, unsigned char *AESKey, bool setAESKey )
 {
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 8872e30 (upload all filesss)
 	// Already handled by caller
 	//if ( AllowIncomingConnections() )
 	{
@@ -2806,6 +2858,7 @@ void RakPeer::OnConnectionRequest( RakPeer::RemoteSystemStruct *remoteSystem, un
 			remoteSystem->connectMode=RemoteSystemStruct::SET_ENCRYPTION_ON_MULTIPLE_16_BYTE_PACKET;
 		}
 	}
+<<<<<<< HEAD
 =======
 	// Compatibility mode: skip AUTH_KEY challenge/validation and accept immediately.
 	remoteSystem->setAESKey=setAESKey;
@@ -2817,6 +2870,8 @@ void RakPeer::OnConnectionRequest( RakPeer::RemoteSystemStruct *remoteSystem, un
 	remoteSystem->sampData.unverifiedRPCs = 0;
 	AcceptConnectionRequest(remoteSystem);
 >>>>>>> 1f00a6e (Первый коммит)
+=======
+>>>>>>> 8872e30 (upload all filesss)
 }
 
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -3004,13 +3059,17 @@ bool RakPeer::HandleRPCPacket( const char *data, int length, PlayerID playerId, 
 	RPCParameters rpcParms;
 	NetworkID networkID;
 	RakNet::BitStream replyToSender;
+<<<<<<< HEAD
 	RPCID rawIncomingRpcId = (RPCID)0;
+=======
+>>>>>>> 8872e30 (upload all filesss)
 	rpcParms.replyToSender=&replyToSender;
 
 	rpcParms.recipient=this;
 	rpcParms.sender=playerId;
 	rpcParms.senderIndex=playerIndex;
 
+<<<<<<< HEAD
 	if (SAMPRakNet::GetCore() && data && length > 0)
 	{
 		SAMPRakNet::GetCore()->printLn(
@@ -3045,6 +3104,8 @@ bool RakPeer::HandleRPCPacket( const char *data, int length, PlayerID playerId, 
 		}
 	}
 
+=======
+>>>>>>> 8872e30 (upload all filesss)
 	// Note to self - if I change this format then I have to change the PacketLogger class too
 	incomingBitStream.IgnoreBits(8);
 	if (data[0]==ID_TIMESTAMP)
@@ -3082,14 +3143,19 @@ bool RakPeer::HandleRPCPacket( const char *data, int length, PlayerID playerId, 
 		}
 	}
 #else
+<<<<<<< HEAD
 	unsigned short rpcId9 = 0;
 	if ( incomingBitStream.ReadBits( (unsigned char*) &rpcId9, 9, true ) == false )
+=======
+	if ( incomingBitStream.Read( uniqueIdentifier ) == false )
+>>>>>>> 8872e30 (upload all filesss)
 	{
 
 		RakAssert( 0 ); // bitstream was not long enough.  Some kind of internal error
 
 		return false;
 	}
+<<<<<<< HEAD
 	uniqueIdentifier = (RPCID) rpcId9;
 	rawIncomingRpcId = uniqueIdentifier;
 	if (SAMPRakNet::GetCore() && (unsigned int)rawIncomingRpcId == 29U)
@@ -3108,6 +3174,8 @@ bool RakPeer::HandleRPCPacket( const char *data, int length, PlayerID playerId, 
 	case 517: uniqueIdentifier = (RPCID)54; break;  // RPC_NPCJoin -> NetCode::RPC::NPCConnect
 	default: break;
 	}
+=======
+>>>>>>> 8872e30 (upload all filesss)
 	rpcIndex = rpcMap.GetIndexFromFunctionName(uniqueIdentifier);
 #endif
 
@@ -3165,6 +3233,7 @@ bool RakPeer::HandleRPCPacket( const char *data, int length, PlayerID playerId, 
 
 	if (rpcIndex==UNDEFINED_RPC_INDEX)
 	{
+<<<<<<< HEAD
 		if (SAMPRakNet::GetCore())
 		{
 #if RPCID_STRING
@@ -3182,6 +3251,8 @@ bool RakPeer::HandleRPCPacket( const char *data, int length, PlayerID playerId, 
 				(unsigned int)rpcParms.numberOfBitsOfData);
 #endif
 		}
+=======
+>>>>>>> 8872e30 (upload all filesss)
 		// Unregistered function
 		RakAssert(0);
 		return false;
@@ -3196,6 +3267,7 @@ bool RakPeer::HandleRPCPacket( const char *data, int length, PlayerID playerId, 
 		return false;
 	}
 
+<<<<<<< HEAD
 	if (SAMPRakNet::GetCore())
 	{
 #if RPCID_STRING
@@ -3217,6 +3289,8 @@ bool RakPeer::HandleRPCPacket( const char *data, int length, PlayerID playerId, 
 #endif
 	}
 
+=======
+>>>>>>> 8872e30 (upload all filesss)
 	// Make sure the call type matches - if this is a pointer to a class member then networkID must be defined.  Otherwise it must not be defined
 	if (node->isPointerToMember==true && networkIDIsEncoded==false)
 	{
@@ -3602,7 +3676,11 @@ void RakPeer::CloseConnectionInternal( const PlayerID target, bool sendDisconnec
 	unsigned i,j;
 
 
+<<<<<<< HEAD
 	RakAssert(orderingChannel >=0 && orderingChannel < NUMBER_OF_ORDERED_STREAMS);
+=======
+	RakAssert(orderingChannel >=0 && orderingChannel < 32);
+>>>>>>> 8872e30 (upload all filesss)
 
 
 	if (target==UNASSIGNED_PLAYER_ID)
@@ -3693,7 +3771,11 @@ bool RakPeer::ValidSendTarget(PlayerID playerId, bool broadcast)
 void RakPeer::SendBuffered( const char *data, int numberOfBitsToSend, PacketPriority priority, PacketReliability reliability, char orderingChannel, PlayerID playerId, bool broadcast, RemoteSystemStruct::ConnectMode connectionMode )
 {
 
+<<<<<<< HEAD
 	RakAssert(orderingChannel >=0 && orderingChannel < NUMBER_OF_ORDERED_STREAMS);
+=======
+	RakAssert(orderingChannel >=0 && orderingChannel < 32);
+>>>>>>> 8872e30 (upload all filesss)
 
 
 
@@ -4022,6 +4104,7 @@ namespace RakNet
 		return false;
 	}
 
+<<<<<<< HEAD
 	bool TryUnwrapBridgeRelayPacket(
 		RakPeer* rakPeer,
 		unsigned int binaryAddress,
@@ -4087,6 +4170,8 @@ namespace RakNet
 		return true;
 	}
 
+=======
+>>>>>>> 8872e30 (upload all filesss)
 	// --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 	#ifdef _WIN32
 	void __stdcall ProcessNetworkPacket( const unsigned int binaryAddress, const unsigned short port, const char *data, const int length, RakPeer *rakPeer )
@@ -4101,6 +4186,7 @@ namespace RakNet
 		PlayerID playerId;
 		unsigned i;
 		RakPeer::RemoteSystemStruct *remoteSystem;
+<<<<<<< HEAD
 
 		{
 			static const char kBridgeTag[] = "BY_DEATHCODER";
@@ -4218,6 +4304,12 @@ namespace RakNet
 		}
 
 		const bool needsBanCheck = false;
+=======
+		playerId.binaryAddress = binaryAddress;
+		playerId.port = port;
+
+		const bool needsBanCheck = (data[0] == ID_OPEN_CONNECTION_REQUEST || data[0] == ID_OPEN_CONNECTION_REPLY || data[0] == ID_CONNECTION_ATTEMPT_FAILED);
+>>>>>>> 8872e30 (upload all filesss)
 
 	#if !defined(_COMPATIBILITY_1)
 		if (needsBanCheck && ProcessBan(rakPeer, playerId, data, length))
@@ -4375,10 +4467,13 @@ namespace RakNet
 		// Therefore, this datagram must be under 17 bits - otherwise it may be normal network traffic as the min size for a raknet send is 17 bits
 		else if ((unsigned char)(data)[0] == ID_OPEN_CONNECTION_REQUEST && length == sizeof(unsigned char)*3)
 		{
+<<<<<<< HEAD
 			if (SAMPRakNet::GetCore())
 			{
 				SAMPRakNet::GetCore()->printLn("[HS] OPEN_CONNECTION_REQUEST from %s len=%d id=%u", playerId.ToString(), length, (unsigned int)(unsigned char)data[0]);
 			}
+=======
+>>>>>>> 8872e30 (upload all filesss)
 			if (!SAMPRakNet::OnConnectionRequest(rakPeer->connectionSocket, playerId, data, minConnectionTick, minConnectionLogTick))
 			{
 				return;
@@ -4393,9 +4488,27 @@ namespace RakNet
 			static unsigned int s_uiLastProcessedConnTick = 0;
 			if (rss==0 || rss->weInitiatedTheConnection==true)
 			{
+<<<<<<< HEAD
 				// Compatibility mode: do not reject by unverified instance count.
 
 				// Compatibility mode: do not reject repeated open-connection requests.
+=======
+				if (rakPeer->GetNumberOfUnverifiedInstances(binaryAddress) > 30)
+				{
+					SAMPRakNet::GetCore()->printLn("Blocking %s due to a 'server full' attack (1)", playerId.ToString());
+					rakPeer->AddToBanList(rakPeer->PlayerIDToDottedIP(playerId), 120000);
+					return;
+				}
+
+				if (playerId.binaryAddress == s_uiLastProcessedBinaryAddr
+						&& RakNet::GetTime() - s_uiLastProcessedConnTick < 30000
+						&& rakPeer->GetNumberOfActivePeers() == (rakPeer->GetMaximumNumberOfPeers() - 1))
+				{
+					SAMPRakNet::GetCore()->printLn("Blocking %s due to a 'server full' attack (2)", playerId.ToString());
+					rakPeer->AddToBanList(rakPeer->PlayerIDToDottedIP(playerId), 120000);
+					return;
+				}
+>>>>>>> 8872e30 (upload all filesss)
 
 
 
@@ -4417,10 +4530,13 @@ namespace RakNet
 				unsigned i;
 				for (i=0; i < rakPeer->messageHandlerList.Size(); i++)
 					rakPeer->messageHandlerList[i]->OnDirectSocketSend((char*)&c, 16, playerId);
+<<<<<<< HEAD
 				if (SAMPRakNet::GetCore())
 				{
 					SAMPRakNet::GetCore()->printLn("[HS] SEND %s -> %s id=%u", (c[0] == ID_OPEN_CONNECTION_REPLY ? "OPEN_CONNECTION_REPLY" : "NO_FREE_INCOMING_CONNECTIONS"), playerId.ToString(), (unsigned int)c[0]);
 				}
+=======
+>>>>>>> 8872e30 (upload all filesss)
 				SocketLayer::Instance()->SendTo( rakPeer->connectionSocket, (char*)&c, 2, playerId.binaryAddress, playerId.port );
 
 				if (rss)
@@ -4444,10 +4560,13 @@ namespace RakNet
 					unsigned i;
 					for (i=0; i < rakPeer->messageHandlerList.Size(); i++)
 						rakPeer->messageHandlerList[i]->OnDirectSocketSend((char*)&c, 16, playerId);
+<<<<<<< HEAD
 					if (SAMPRakNet::GetCore())
 					{
 						SAMPRakNet::GetCore()->printLn("[HS] SEND %s -> %s id=%u", (c[0] == ID_OPEN_CONNECTION_REPLY ? "OPEN_CONNECTION_REPLY" : "NO_FREE_INCOMING_CONNECTIONS"), playerId.ToString(), (unsigned int)c[0]);
 					}
+=======
+>>>>>>> 8872e30 (upload all filesss)
 					SocketLayer::Instance()->SendTo( rakPeer->connectionSocket, (char*)&c, 2, playerId.binaryAddress, playerId.port );
 				}
 			}
@@ -4492,16 +4611,52 @@ namespace RakNet
 				}
 			}
 
+<<<<<<< HEAD
 			(void)shouldBanPeer;
 		}
 		else
 		{
 			// Compatibility mode: skip dynamic ban processing for unknown senders.
+=======
+			if (shouldBanPeer && playerId.binaryAddress != LOCALHOST && GetTime() > SAMPRakNet::GetGracePeriod())
+			{
+				const char* playerIp = rakPeer->PlayerIDToDottedIP(playerId);
+				RakNetTime banTime = SAMPRakNet::GetNetworkLimitsBanTime();
+				rakPeer->AddToBanList(playerIp, banTime);
+
+				Packet* packet = AllocPacket(sizeof(char));
+				packet->data[0] = ID_DISCONNECTION_NOTIFICATION;
+				packet->bitSize = (sizeof(char)) * 8;
+				packet->playerId = playerId;
+				packet->playerIndex = (PlayerIndex)rakPeer->GetIndexFromPlayerID(playerId, true);
+				rakPeer->AddPacketToProducer(packet);
+
+				rakPeer->CloseConnectionInternal(playerId, false, true, 0);
+			}
+		}
+		else
+		{
+			if (ProcessBan(rakPeer, playerId, data, length))
+			{
+				return;
+			}
+>>>>>>> 8872e30 (upload all filesss)
 
 			for (i=0; i < rakPeer->messageHandlerList.Size(); i++)
 				rakPeer->messageHandlerList[i]->OnDirectSocketReceive(data, length*8, playerId);
 
+<<<<<<< HEAD
 			// Compatibility mode: do not drop oversized packets from unknown senders here.
+=======
+			if (length > 541)
+			{
+	#if !defined(_COMPATIBILITY_1)
+				// Flood attack?  Unknown systems should never send more than a small amount of data. Do a short ban
+				rakPeer->AddToBanList(rakPeer->PlayerIDToDottedIP(playerId), 10000);
+	#endif
+				return;
+			}
+>>>>>>> 8872e30 (upload all filesss)
 
 			// These are all messages from unconnected systems.  Messages here can be any size, but are never processed from connected systems.
 			if ( ( (unsigned char) data[ 0 ] == ID_PING_OPEN_CONNECTIONS
@@ -4929,6 +5084,7 @@ namespace RakNet
 					else
 						// Fast and easy - just use the data that was returned
 						byteSize = BITS_TO_BYTES( bitSize );
+<<<<<<< HEAD
 					if (SAMPRakNet::GetCore() && data && byteSize > 0)
 					{
 						SAMPRakNet::GetCore()->printLn(
@@ -4954,12 +5110,15 @@ namespace RakNet
 								(unsigned int)(unsigned char)data[0]);
 						}
 					}
+=======
+>>>>>>> 8872e30 (upload all filesss)
 
 					// For unknown senders we only accept a few specific packets
 					if (remoteSystem->connectMode==RemoteSystemStruct::UNVERIFIED_SENDER)
 					{
 						if ( (unsigned char)(data)[0] == ID_CONNECTION_REQUEST )
 						{
+<<<<<<< HEAD
 							if (SAMPRakNet::GetCore())
 							{
 								SAMPRakNet::GetCore()->printLn(
@@ -4975,6 +5134,11 @@ namespace RakNet
 							// AUTH_KEY flow is disabled - ignore this packet.
 							delete[] data;
 						}
+=======
+							ParseConnectionRequestPacket(remoteSystem, playerId, (const char*)data, byteSize);
+							delete [] data;
+						}
+>>>>>>> 8872e30 (upload all filesss)
 						else
 						{
 							if ((unsigned char)(data)[0] == ID_RPC && remoteSystem->sampData.unverifiedRPCs++ < MAX_UNVERIFIED_RPCS)
@@ -5013,6 +5177,7 @@ namespace RakNet
 						// at the same time
 						if ( (unsigned char)(data)[0] == ID_CONNECTION_REQUEST )
 						{
+<<<<<<< HEAD
 							if (SAMPRakNet::GetCore())
 							{
 								SAMPRakNet::GetCore()->printLn(
@@ -5021,6 +5186,8 @@ namespace RakNet
 									byteSize,
 									(int)remoteSystem->connectMode);
 							}
+=======
+>>>>>>> 8872e30 (upload all filesss)
 							// 04/27/06 This is wrong.  With cross connections, we can both have initiated the connection are in state REQUESTED_CONNECTION
 							// 04/28/06 Downgrading connections from connected will close the connection due to security at ((remoteSystem->connectMode!=RemoteSystemStruct::CONNECTED && time > remoteSystem->connectionTime && time - remoteSystem->connectionTime > 10000))
 							if (remoteSystem->connectMode!=RemoteSystemStruct::CONNECTED)
@@ -5246,12 +5413,16 @@ namespace RakNet
 							delete [] data;
 						}
 <<<<<<< HEAD
+<<<<<<< HEAD
 						else if ( (unsigned char)(data)[0] == ID_CONNECTION_REQUEST_ACCEPTED && byteSize == sizeof(unsigned char)+sizeof(unsigned int)+sizeof(unsigned int)+sizeof(unsigned short))
 =======
 						else if ( (unsigned char)(data)[0] == ID_CONNECTION_REQUEST_ACCEPTED &&
 							(byteSize == sizeof(unsigned char)+sizeof(unsigned int)+sizeof(unsigned short)+sizeof(PlayerIndex)+sizeof(unsigned int) ||
 							 byteSize == sizeof(unsigned char)+sizeof(unsigned int)+sizeof(unsigned short)+sizeof(unsigned int)))
 >>>>>>> 1f00a6e (Первый коммит)
+=======
+						else if ( (unsigned char)(data)[0] == ID_CONNECTION_REQUEST_ACCEPTED && byteSize == sizeof(unsigned char)+sizeof(unsigned int)+sizeof(unsigned short)+sizeof(unsigned int))
+>>>>>>> 8872e30 (upload all filesss)
 						{
 							// Make sure this connection accept is from someone we wanted to connect to
 							bool allowConnection, alreadyConnected;
@@ -5269,13 +5440,17 @@ namespace RakNet
 							{
 								PlayerID externalID;
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 								PlayerIndex playerIndex = 0;
 >>>>>>> 1f00a6e (Первый коммит)
+=======
+>>>>>>> 8872e30 (upload all filesss)
 								unsigned int token;
 
 								RakNet::BitStream inBitStream((unsigned char *) data, byteSize, false);
 								inBitStream.IgnoreBits(8); // ID_CONNECTION_REQUEST_ACCEPTED
+<<<<<<< HEAD
 								inBitStream.Read(token);
 								inBitStream.Read(externalID.binaryAddress);
 								inBitStream.Read(externalID.port);
@@ -5285,6 +5460,12 @@ namespace RakNet
 									inBitStream.Read(playerIndex);
 								inBitStream.Read(token);
 >>>>>>> 1f00a6e (Первый коммит)
+=======
+							//	inBitStream.Read(remotePort);
+								inBitStream.Read(externalID.binaryAddress);
+								inBitStream.Read(externalID.port);
+								inBitStream.Read(token);
+>>>>>>> 8872e30 (upload all filesss)
 
 								// Find a free remote system struct to use
 								//						RakNet::BitStream casBitS(data, byteSize, false);
@@ -5365,6 +5546,7 @@ namespace RakNet
 							// This shouldn't happen as it's an internal packet.
 							delete[] data;
 						}
+<<<<<<< HEAD
 						else if (byteSize >= 11)
 						{
 							// Compatibility path for clients that send ClientJoin payload without ID_RPC wrapper.
@@ -5435,6 +5617,10 @@ namespace RakNet
 									(unsigned int)(unsigned char)data[0],
 									(int)remoteSystem->connectMode);
 							}
+=======
+						else if (data[0] >= (unsigned char)ID_RPC)
+						{
+>>>>>>> 8872e30 (upload all filesss)
 							packet = AllocPacket(byteSize, data);
 							packet->bitSize = bitSize;
 							packet->playerId = playerId;

@@ -42,6 +42,7 @@ void SAMPRakNet::
 
 uint8_t*
 SAMPRakNet::
+<<<<<<< HEAD
     Decrypt(uint8_t const* src, int len, uint16_t port)
 {
     static const uint8_t
@@ -92,6 +93,13 @@ SAMPRakNet::
 {
     if (src == nullptr || len <= 0)
         return nullptr;
+=======
+    Decrypt(uint8_t const* src, int len)
+{
+    if (!src || len <= 1) {
+        return nullptr;
+    }
+>>>>>>> 8872e30 (upload all filesss)
 
     static const uint8_t sampEncrTable[256] = {
         0xDC, 0x4D, 0x34, 0x31, 0x03, 0x0B, 0xE4, 0xC8, 0xC7, 0x73, 0x38, 0xE9, 0xD9, 0x16, 0x80, 0x06,
@@ -112,6 +120,7 @@ SAMPRakNet::
         0x7A, 0xBB, 0x21, 0x2A, 0xB0, 0xD5, 0xAC, 0xC6, 0x44, 0xE2, 0x37, 0x79, 0x95, 0xE1, 0xCF, 0x5E
     };
 
+<<<<<<< HEAD
     uint8_t checksum = 0;
     const int port = static_cast<int>(GetPort());
     uint8_t toggle = 0;
@@ -131,6 +140,34 @@ SAMPRakNet::
     }
     encryptBuffer_[0] = checksum;
     return encryptBuffer_;
+=======
+    static uint8_t inverseSampEncrTable[256];
+    static bool inverseInit = false;
+    if (!inverseInit) {
+        for (int i = 0; i < 256; ++i) {
+            inverseSampEncrTable[sampEncrTable[i]] = static_cast<uint8_t>(i);
+        }
+        inverseInit = true;
+    }
+
+    const uint16_t port = GetPort();
+    uint8_t checksum = 0;
+
+    for (int i = 0; i < len - 1; ++i) {
+        const uint8_t xorMask = (i & 1)
+            ? static_cast<uint8_t>((port ^ 0x55u) & 0xFFu)
+            : static_cast<uint8_t>(((port ^ 0x5555u) >> 8) & 0xFFu);
+        const uint8_t decoded = static_cast<uint8_t>(src[i + 1] ^ xorMask);
+        const uint8_t plain = inverseSampEncrTable[decoded];
+        checksum ^= static_cast<uint8_t>(plain & 0x99u);
+        decryptBuffer_[i] = plain;
+    }
+
+    if (src[0] != checksum) {
+        return nullptr;
+    }
+    return decryptBuffer_;
+>>>>>>> 8872e30 (upload all filesss)
 }
 
 uint8_t*
@@ -436,6 +473,7 @@ struct AuthEntry {
     { "20C92B4B3F892B21", "282B4A757C5C4E1DDBFA0D1C39EA53576AB91399" }
 };
 
+<<<<<<< HEAD
 static bool GenerateAuthKeyV2(const StringView& in, char* out, size_t outCapacity)
 {
 	// Client-side requirement: reject challenges longer than 0x80 bytes.
@@ -518,6 +556,8 @@ static bool GenerateAuthKeyV2(const StringView& in, char* out, size_t outCapacit
 	return true;
 }
 
+=======
+>>>>>>> 8872e30 (upload all filesss)
 Pair<uint8_t, StringView> SAMPRakNet::GenerateAuth()
 {
     const uint8_t rnd = rand();
@@ -526,6 +566,7 @@ Pair<uint8_t, StringView> SAMPRakNet::GenerateAuth()
 
 bool SAMPRakNet::CheckAuth(uint8_t index, StringView auth)
 {
+<<<<<<< HEAD
 	char expected[260] = {0};
 	const StringView challenge = AuthTable[index].send;
 	if (GenerateAuthKeyV2(challenge, expected, sizeof(expected)))
@@ -537,6 +578,9 @@ bool SAMPRakNet::CheckAuth(uint8_t index, StringView auth)
 
 	// Backward compatibility with legacy table-based clients.
 	return AuthTable[index].recv == auth;
+=======
+    return AuthTable[index].recv == auth;
+>>>>>>> 8872e30 (upload all filesss)
 }
 
 uint16_t cookies[2][256];
@@ -580,9 +624,12 @@ bool SAMPRakNet::OnConnectionRequest(
     RakNet::RakNetTime& minConnectionLogTick
 )
 {
+<<<<<<< HEAD
 	(void)connectionSocket;
 	(void)data;
 
+=======
+>>>>>>> 8872e30 (upload all filesss)
 	ResetOmpPlayerConfiguration(playerId);
 
 	if (playerId.binaryAddress == LOCALHOST)
@@ -621,5 +668,11 @@ bool SAMPRakNet::OnConnectionRequest(
 		}
 	}
 
+<<<<<<< HEAD
+=======
+	(void)connectionSocket;
+	(void)data;
+
+>>>>>>> 8872e30 (upload all filesss)
     return true;
 }

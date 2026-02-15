@@ -131,7 +131,11 @@ Packet* RakClient::Receive( void )
 //			cas.Deserialize(bitStream);
 		//	unsigned short remotePort;
 		//	PlayerID externalID;
+<<<<<<< HEAD
 			PlayerIndex playerIndex;
+=======
+			PlayerIndex playerIndex = 0;
+>>>>>>> 8872e30 (upload all filesss)
 			unsigned int token;
 
 			RakNet::BitStream inBitStream(packet->data, packet->length, false);
@@ -139,7 +143,10 @@ Packet* RakClient::Receive( void )
 			//inBitStream.IgnoreBits(8 * sizeof(unsigned short)); //inBitStream.Read(remotePort);
 			inBitStream.IgnoreBits(8 * sizeof(unsigned int)); //inBitStream.Read(externalID.binaryAddress);
 			inBitStream.IgnoreBits(8 * sizeof(unsigned short)); //inBitStream.Read(externalID.port);			
+<<<<<<< HEAD
 			inBitStream.Read(playerIndex);
+=======
+>>>>>>> 8872e30 (upload all filesss)
 			inBitStream.Read(token);
 
 			localPlayerIndex = playerIndex;

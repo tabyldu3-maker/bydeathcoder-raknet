@@ -23,6 +23,10 @@
 */
 #include "SocketLayer.h"
 #include <assert.h>
+<<<<<<< HEAD
+=======
+#include <string>
+>>>>>>> 8872e30 (upload all filesss)
 #include "MTUSize.h"
 #include "RakAssert.h"
 #include "PacketEnumerations.h"
@@ -49,6 +53,7 @@ using namespace RakNet;
 #pragma warning( push )
 #endif
 
+<<<<<<< HEAD
 namespace
 {
 	bool IsRelayBridgePacket(const char* data, int length)
@@ -86,6 +91,8 @@ namespace
 	}
 }
 
+=======
+>>>>>>> 8872e30 (upload all filesss)
 bool SocketLayer::socketLayerStarted = false;
 #ifdef _WIN32
 WSADATA SocketLayer::winsockInfo;
@@ -107,6 +114,36 @@ namespace RakNet
 	#endif
 }
 
+<<<<<<< HEAD
+=======
+namespace
+{
+	void LogPacketHex(const char* tag, const uint8_t* data, int len)
+	{
+		if (data == nullptr || len <= 0)
+			return;
+
+		auto* core = SAMPRakNet::GetCore();
+		if (core == nullptr)
+			return;
+
+		static const char hexLut[] = "0123456789ABCDEF";
+		std::string hex;
+		hex.reserve(static_cast<size_t>(len) * 3);
+		for (int i = 0; i < len; ++i)
+		{
+			const uint8_t byte = data[i];
+			hex.push_back(hexLut[(byte >> 4) & 0x0F]);
+			hex.push_back(hexLut[byte & 0x0F]);
+			if (i + 1 != len)
+				hex.push_back(' ');
+		}
+
+		core->printLn("[%s] id=0x%02X len=%d hex=%s", tag, data[0], len, hex.c_str());
+	}
+}
+
+>>>>>>> 8872e30 (upload all filesss)
 #ifdef _DEBUG
 #include <stdio.h>
 #endif
@@ -405,6 +442,7 @@ int SocketLayer::RecvFrom( const SOCKET s, RakPeer *rakPeer, int *errorCode )
         return 1;
 	}
 
+<<<<<<< HEAD
 		if ( len != SOCKET_ERROR )
 		{
 			unsigned short portnum;
@@ -476,14 +514,36 @@ int SocketLayer::RecvFrom( const SOCKET s, RakPeer *rakPeer, int *errorCode )
 		ProcessNetworkPacket(sa.sin_addr.s_addr, portnum, (char*)decrypted, len, rakPeer);
 #ifdef _DEBUG
 		if (decrypted == nullptr) {
+=======
+	if ( len != SOCKET_ERROR )
+	{
+		if (len > 10 && data[0] == 'S' && data[1] == 'A' && data[2] == 'M' && data[3] == 'P')
+		{
+			SAMPRakNet::HandleQuery(s, len2, sa, data, len);
+			return 1;
+		}
+
+		unsigned short portnum;
+		portnum = ntohs( sa.sin_port );
+		uint8_t* decrypted = SAMPRakNet::Decrypt((uint8_t*)data, len);
+		if (decrypted) {
+			LogPacketHex("CLIENT", decrypted, len - 1);
+			ProcessNetworkPacket(sa.sin_addr.s_addr, portnum, (char*)decrypted, len - 1, rakPeer);
+		}
+#ifdef _DEBUG
+		else {
+>>>>>>> 8872e30 (upload all filesss)
 			uint8_t* const addr = reinterpret_cast<uint8_t*>(&sa.sin_addr.s_addr);
 			SAMPRakNet::GetCore()->printLn("Dropping bad packet from %u.%u.%u.%u:%u!", addr[0], addr[1], addr[2], addr[3], sa.sin_port);
 		}
 #endif
 		return 1;
 	}
+<<<<<<< HEAD
 =======
 >>>>>>> 1f00a6e (Первый коммит)
+=======
+>>>>>>> 8872e30 (upload all filesss)
 	else
 	{
 		*errorCode = 0;
@@ -550,6 +610,7 @@ int SocketLayer::SendTo( SOCKET s, const char *data, int length, unsigned int bi
 	do
 	{
 <<<<<<< HEAD
+<<<<<<< HEAD
 		// TODO - use WSASendTo which is faster.
 		if (length > 0 && SAMPRakNet::GetCore())
 		{
@@ -567,6 +628,10 @@ int SocketLayer::SendTo( SOCKET s, const char *data, int length, unsigned int bi
 		LogRawPacketHex("[RAW OUT HEX]", outgoing, sendLength);
 		len = sendto(s, (const char*)outgoing, sendLength, 0, (const sockaddr*)&sa, sizeof(struct sockaddr_in));
 >>>>>>> 1f00a6e (Первый коммит)
+=======
+		LogPacketHex("SEND", reinterpret_cast<const uint8_t*>(data), length);
+		len = sendto(s, data, length, 0, (const sockaddr*)&sa, sizeof(struct sockaddr_in));
+>>>>>>> 8872e30 (upload all filesss)
 	}
 	while ( len == 0 );
 
