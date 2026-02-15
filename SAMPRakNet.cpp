@@ -88,6 +88,53 @@ SAMPRakNet::
 
 uint8_t*
 SAMPRakNet::
+    EncryptLegacy(uint8_t const* src, int len)
+{
+    if (src == nullptr || len <= 0)
+        return nullptr;
+
+    static const uint8_t sampEncrTable[256] = {
+        0xDC, 0x4D, 0x34, 0x31, 0x03, 0x0B, 0xE4, 0xC8, 0xC7, 0x73, 0x38, 0xE9, 0xD9, 0x16, 0x80, 0x06,
+        0xD6, 0x8B, 0x20, 0x3B, 0x93, 0xEB, 0x11, 0x40, 0x0D, 0xC4, 0xDD, 0x77, 0x8F, 0xA1, 0x18, 0x48,
+        0x99, 0xBD, 0xDF, 0x27, 0x28, 0x0E, 0x61, 0x4F, 0x53, 0x7F, 0xF0, 0x30, 0xF9, 0x12, 0x71, 0x62,
+        0x6A, 0x4B, 0x35, 0x8A, 0xE6, 0xD1, 0xF1, 0x1D, 0xA8, 0xFA, 0xED, 0xD3, 0xA7, 0x92, 0x00, 0x8E,
+        0x52, 0xF8, 0x57, 0x1E, 0x29, 0x24, 0x8D, 0x75, 0x04, 0x3C, 0x25, 0xCD, 0x0A, 0x59, 0xAD, 0x6D,
+        0x87, 0x02, 0x9E, 0x15, 0xB9, 0x6C, 0x7C, 0xB7, 0xBC, 0xA9, 0xE7, 0x85, 0x13, 0xF7, 0x39, 0xE8,
+        0xC5, 0xCA, 0x50, 0x3A, 0xC0, 0xA2, 0x5B, 0x08, 0xB8, 0x81, 0xFB, 0xA5, 0x7D, 0xA3, 0x43, 0x74,
+        0xEE, 0x76, 0x4A, 0x23, 0x72, 0x3F, 0x1B, 0x2B, 0xB3, 0x60, 0xBF, 0x2E, 0xAA, 0xEF, 0xFF, 0x17,
+        0x64, 0xF2, 0xDB, 0x9D, 0x66, 0x9B, 0xD2, 0xB1, 0xCB, 0xCC, 0x86, 0x42, 0x84, 0x98, 0xEA, 0xCE,
+        0x5F, 0x70, 0x0F, 0x1F, 0x36, 0x83, 0xAB, 0xD8, 0xF4, 0x88, 0xC3, 0x65, 0xAF, 0xA6, 0x82, 0xA4,
+        0x32, 0x68, 0x2C, 0xDA, 0x9F, 0x22, 0xC9, 0x55, 0xBE, 0x94, 0x96, 0x41, 0x0C, 0x5A, 0x9A, 0xDE,
+        0xC1, 0x3E, 0x46, 0x97, 0xE3, 0xE0, 0x69, 0xB5, 0xA0, 0xF5, 0xB6, 0x10, 0x4C, 0x7B, 0xBA, 0x1C,
+        0x49, 0x33, 0x51, 0xFD, 0x63, 0x90, 0x6F, 0x8C, 0x14, 0x58, 0x5C, 0x4E, 0x6E, 0x01, 0xE5, 0xD0,
+        0xD7, 0xAE, 0x1A, 0x7E, 0xC2, 0x19, 0x91, 0x56, 0x9C, 0xB2, 0x6B, 0xFC, 0x78, 0x2D, 0xB4, 0x09,
+        0x89, 0xEC, 0x54, 0xFE, 0x3D, 0x5D, 0x2F, 0x67, 0xD4, 0x47, 0x26, 0xF3, 0xF6, 0x05, 0x07, 0x45,
+        0x7A, 0xBB, 0x21, 0x2A, 0xB0, 0xD5, 0xAC, 0xC6, 0x44, 0xE2, 0x37, 0x79, 0x95, 0xE1, 0xCF, 0x5E
+    };
+
+    uint8_t checksum = 0;
+    const int port = static_cast<int>(GetPort());
+    uint8_t toggle = 0;
+    encryptBuffer_[0] = 0;
+    for (int i = 0; i < len; ++i)
+    {
+        checksum ^= static_cast<uint8_t>(src[i] & 0x99);
+
+        uint8_t x;
+        if (toggle == 0)
+            x = static_cast<uint8_t>((static_cast<uint16_t>(port ^ 0x5555)) >> 8);
+        else
+            x = static_cast<uint8_t>(port ^ 0x55);
+        toggle ^= 1u;
+
+        encryptBuffer_[i + 1] = static_cast<uint8_t>(sampEncrTable[src[i]] ^ x);
+    }
+    encryptBuffer_[0] = checksum;
+    return encryptBuffer_;
+}
+
+uint8_t*
+SAMPRakNet::
 	Encrypt(const OmpPlayerEncryptionData* encryptionData, uint8_t const* src, int len)
 {
 	const auto key = encryptionData->key;
@@ -389,6 +436,88 @@ struct AuthEntry {
     { "20C92B4B3F892B21", "282B4A757C5C4E1DDBFA0D1C39EA53576AB91399" }
 };
 
+static bool GenerateAuthKeyV2(const StringView& in, char* out, size_t outCapacity)
+{
+	// Client-side requirement: reject challenges longer than 0x80 bytes.
+	if (in.size() == 0 || in.size() > 0x80 || outCapacity < 97)
+		return false;
+
+	static const uint64_t kUnk189EB8[16] = {
+		0x43000000591ULL, 0x3DC0000039FULL, 0x18400000924ULL, 0x8F000000A34ULL,
+		0x915000005B2ULL, 0x5F7000007BCULL, 0xAC500000A26ULL, 0x5F2000005A7ULL,
+		0xC470000057BULL, 0x54700000D88ULL, 0xC1200000E1CULL, 0x50E000007DDULL,
+		0xEC600000341ULL, 0x5C10000095DULL, 0x93000000C61ULL, 0x480000009BAULL
+	};
+
+	char buffer[0x100] = {0};
+	memcpy(buffer, in.data(), in.size());
+	buffer[in.size()] = 0;
+
+	uint64_t dest[16];
+	memcpy(dest, kUnk189EB8, sizeof(dest));
+	uint32_t* d32 = reinterpret_cast<uint32_t*>(dest);
+	unsigned char* v7 = reinterpret_cast<unsigned char*>(buffer);
+	const uint32_t inlen = static_cast<uint32_t>(in.size());
+	const int v10 = static_cast<int>(3 * inlen - 34);
+	int v8 = -348;
+	int v9 = 0;
+	int v6 = static_cast<unsigned char>(*buffer);
+
+	while (v6 != 0 && v9 < 32)
+	{
+		uint32_t v11 = d32[v9];
+		const int v31 = -347 - v9;
+		const int v30 = v9 - static_cast<int>(inlen);
+		uint32_t v12 = 0;
+		const int v27 = v8;
+		const uint8_t v13 = static_cast<uint8_t>(4 * (v9 + static_cast<int>(inlen)));
+		const int v28 = v9;
+		uint32_t v20 = 0;
+
+		do
+		{
+			const uint8_t v14 = static_cast<uint8_t>(v6 + (v12 >> 5));
+			v7[v12] = static_cast<uint8_t>(v14 + v13);
+			const uint32_t v16 = v14;
+			const int v17 = v31 + static_cast<int>(v12);
+			const uint32_t modBase = v12 + 0xFFFFu;
+			const uint32_t v18 = (static_cast<uint32_t>(v14) - inlen) % modBase;
+			const uint32_t mix = (v16 - static_cast<uint8_t>(v12) + 2u * v16) >> 24;
+			const int v19 = static_cast<int>(v18) + v10 - static_cast<int>(mix) + static_cast<int>(v11);
+			v6 = v7[++v12];
+			v20 = (4u * v16 - 32u) ^ static_cast<uint32_t>((v19 ^ (2 * (v30 + static_cast<int>(v16 >> 1)))) >> 1);
+			v11 = static_cast<uint32_t>(v17) + v20;
+		}
+		while (v6 != 0);
+
+		v8 = v27;
+		v9 = v28;
+		uint32_t v21 = static_cast<uint32_t>(v27 + static_cast<int>(v20) + static_cast<int>(v12)) & 0xFFFu;
+
+		while (v9 < 32)
+		{
+			d32[v9++] = v21;
+			v6 = *v7;
+			--v8;
+			if (v6 != 0)
+				break;
+			v21 = d32[v9];
+		}
+	}
+
+	char* p = out + 1;
+	for (int i = 31; i >= 0; --i)
+	{
+		const uint32_t v24 = d32[i];
+		p[1] = static_cast<char>((v24 & 0xF) + 67);
+		*p = static_cast<char>(((v24 >> 4) & 0xF) + 66);
+		p += 3;
+		*(p - 4) = static_cast<char>(((v24 >> 8) & 0xF) + 65);
+	}
+	out[96] = 0;
+	return true;
+}
+
 Pair<uint8_t, StringView> SAMPRakNet::GenerateAuth()
 {
     const uint8_t rnd = rand();
@@ -397,7 +526,17 @@ Pair<uint8_t, StringView> SAMPRakNet::GenerateAuth()
 
 bool SAMPRakNet::CheckAuth(uint8_t index, StringView auth)
 {
-    return AuthTable[index].recv == auth;
+	char expected[260] = {0};
+	const StringView challenge = AuthTable[index].send;
+	if (GenerateAuthKeyV2(challenge, expected, sizeof(expected)))
+	{
+		const StringView expectedView(expected);
+		if (expectedView == auth)
+			return true;
+	}
+
+	// Backward compatibility with legacy table-based clients.
+	return AuthTable[index].recv == auth;
 }
 
 uint16_t cookies[2][256];

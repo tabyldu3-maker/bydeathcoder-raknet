@@ -1864,30 +1864,53 @@ InternalPacket* ReliabilityLayer::CreateInternalPacketFromBitStream( RakNet::Bit
 	// If the reliability requires an ordering channel and ordering index, we read those.
 	if ( internalPacket->reliability == UNRELIABLE_SEQUENCED || internalPacket->reliability == RELIABLE_SEQUENCED || internalPacket->reliability == RELIABLE_ORDERED )
 	{
-		// ordering channel encoded in 4 bits (from 0 to 15)
-		bitStreamSucceeded = bitStream->ReadBits( ( unsigned char* ) & ( internalPacket->orderingChannel ), 4 );
-#ifdef _DEBUG
-		// 10/08/05 - Disabled assert since this hits from offline packets
-		//RakAssert( bitStreamSucceeded );
-#endif
+		// Compatibility path: some clients write ordering data as
+		// orderingIndex(16) followed by orderingChannel(5).
+		// Prefer that format, then fall back to RakNet default channel(4)+index(16).
+		const int orderingReadOffset = bitStream->GetReadOffset();
+		unsigned char orderingChannelCandidate = 0;
+		OrderingIndexType orderingIndexCandidate = 0;
 
-		if ( bitStreamSucceeded == false )
+		bitStreamSucceeded = bitStream->Read( orderingIndexCandidate );
+		if ( bitStreamSucceeded )
 		{
-			internalPacketPool.ReleasePointer( internalPacket );
-			return 0;
+			bitStreamSucceeded = bitStream->ReadBits( ( unsigned char* ) &orderingChannelCandidate, 5 );
 		}
 
-		bitStreamSucceeded = bitStream->Read( internalPacket->orderingIndex );
+		if ( bitStreamSucceeded && orderingChannelCandidate < NUMBER_OF_ORDERED_STREAMS )
+		{
+			internalPacket->orderingIndex = orderingIndexCandidate;
+			internalPacket->orderingChannel = orderingChannelCandidate;
+		}
+		else
+		{
+			bitStream->SetReadOffset( orderingReadOffset );
 
+			// RakNet default ordering format: channel(4) then index(16)
+			bitStreamSucceeded = bitStream->ReadBits( ( unsigned char* ) & ( internalPacket->orderingChannel ), 4 );
 #ifdef _DEBUG
-		// 10/08/05 - Disabled assert since this hits from offline packets
-		//RakAssert( bitStreamSucceeded );
+			// 10/08/05 - Disabled assert since this hits from offline packets
+			//RakAssert( bitStreamSucceeded );
 #endif
 
-		if ( bitStreamSucceeded == false )
-		{
-			internalPacketPool.ReleasePointer( internalPacket );
-			return 0;
+			if ( bitStreamSucceeded == false )
+			{
+				internalPacketPool.ReleasePointer( internalPacket );
+				return 0;
+			}
+
+			bitStreamSucceeded = bitStream->Read( internalPacket->orderingIndex );
+
+#ifdef _DEBUG
+			// 10/08/05 - Disabled assert since this hits from offline packets
+			//RakAssert( bitStreamSucceeded );
+#endif
+
+			if ( bitStreamSucceeded == false )
+			{
+				internalPacketPool.ReleasePointer( internalPacket );
+				return 0;
+			}
 		}
 	}
 

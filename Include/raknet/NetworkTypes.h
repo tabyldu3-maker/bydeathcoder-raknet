@@ -41,7 +41,7 @@ namespace RakNet
 		#define RAKNET_LEGACY 0
 	#endif
 	#if RAKNET_LEGACY
-		typedef unsigned char RPCID;
+		typedef unsigned short RPCID;
 		#define RPCID_STRING 0
 	#else
 		typedef char * RPCID;
@@ -268,4 +268,3 @@ namespace RakNet
 }
 
 #endif
-

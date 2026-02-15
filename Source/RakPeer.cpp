@@ -902,6 +902,20 @@ Packet* RakPeer::Receive( void )
 	Packet *packet = ReceiveIgnoreRPC();
 	while (packet && (packet->data[ 0 ] == ID_RPC || (packet->length>sizeof(unsigned char)+sizeof(RakNetTime) && packet->data[0]==ID_TIMESTAMP && packet->data[sizeof(unsigned char)+sizeof(RakNetTime)]==ID_RPC)))
 	{
+		if (SAMPRakNet::GetCore())
+		{
+			const unsigned int rpcOffset =
+				(packet->data[0] == ID_TIMESTAMP && packet->length > sizeof(unsigned char)+sizeof(RakNetTime))
+				? (unsigned int)(sizeof(unsigned char)+sizeof(RakNetTime))
+				: 0U;
+			SAMPRakNet::GetCore()->printLn(
+				"[RPC QUEUE] %s len=%u first=%u rpcMarker=%u",
+				packet->playerId.ToString(),
+				(unsigned int)packet->length,
+				(unsigned int)(unsigned char)packet->data[0],
+				(unsigned int)(unsigned char)packet->data[rpcOffset]);
+		}
+
 		// Do RPC calls from the user thread, not the network update thread
 		// If we are currently blocking on an RPC reply, send ID_RPC to the blocker to handle rather than handling RPCs automatically
 		HandleRPCPacket( ( char* ) packet->data, packet->length, packet->playerId, packet->playerIndex );
@@ -1276,7 +1290,9 @@ bool RakPeer::RPC( RPCID  uniqueID, const char *data, unsigned int bitLength, Pa
 			stringCompressor->EncodeString(uniqueID, 256, &outgoingBitStream);
 		}
 #else
-		outgoingBitStream.Write(uniqueID);
+		// Legacy compatibility: client uses 9-bit numeric RPC IDs (supports >255).
+		const unsigned short rpcId9 = (unsigned short) uniqueID;
+		outgoingBitStream.WriteBits((const unsigned char*)&rpcId9, 9, true);
 #endif
 #if !RAKNET_LEGACY
 		outgoingBitStream.Write((bool) ((replyFromTarget!=0)==true));
@@ -2722,47 +2738,59 @@ void RakPeer::AcceptConnectionRequest(RakPeer::RemoteSystemStruct* remoteSystem)
 {
 	remoteSystem->connectMode = RemoteSystemStruct::HANDLING_CONNECTION_REQUEST;
 
+<<<<<<< HEAD
 	RakNet::BitStream bitStream(sizeof(unsigned char) + sizeof(unsigned int) + sizeof(unsigned int) + sizeof(unsigned short));
+=======
+	// Compatibility mode: send 11 bytes total.
+	// Important: this client reads the first 4 bytes after ID as challenge value.
+	// So token must go first.
+	// Layout: ID + token + externalIP + externalPort
+	RakNet::BitStream bitStream(sizeof(unsigned char) + sizeof(unsigned int) + sizeof(unsigned short) + sizeof(unsigned int));
+>>>>>>> 1f00a6e (Первый коммит)
 	bitStream.Write((unsigned char)ID_CONNECTION_REQUEST_ACCEPTED);
 	bitStream.Write(SAMPRakNet::GetToken());
 	bitStream.Write(remoteSystem->playerId.binaryAddress);
 	bitStream.Write(remoteSystem->playerId.port);
 
 	SendImmediate((char*)bitStream.GetData(), bitStream.GetNumberOfBitsUsed(), SYSTEM_PRIORITY, RELIABLE, 0, remoteSystem->playerId, false, false, RakNet::GetTime());
+
+	// Force legacy InitGame RPC right after connection accept, regardless of ClientJoin flow.
+	{
+		RakNet::BitStream initGameRPC;
+		initGameRPC.Write((unsigned char)ID_RPC);
+#if RPCID_STRING
+		// No mapping expected for this forced path; send numeric RPC ID as encoded string fallback.
+		initGameRPC.Write(true);
+		stringCompressor->EncodeString("367", 256, &initGameRPC);
+#else
+		const unsigned short initGameRpcId = 367;
+		initGameRPC.WriteBits((const unsigned char*)&initGameRpcId, 9, true);
+#endif
+#if !RAKNET_LEGACY
+		initGameRPC.Write((bool)false); // not blocking RPC
+#endif
+		initGameRPC.WriteCompressed((unsigned int)0); // payload bit length
+#if !RAKNET_LEGACY
+		initGameRPC.Write(false); // no network ID
+#endif
+		initGameRPC.WriteCompressed((unsigned int)0); // empty payload body
+		SendImmediate((char*)initGameRPC.GetData(), initGameRPC.GetNumberOfBitsUsed(), SYSTEM_PRIORITY, RELIABLE, 0, remoteSystem->playerId, false, false, RakNet::GetTime());
+	}
 }
 
 bool RakPeer::ParseConnectionAuthPacket(RakPeer::RemoteSystemStruct* remoteSystem, PlayerID playerId, unsigned char* data, int byteSize) {
-	if (playerId == UNASSIGNED_PLAYER_ID) {
-		return false;
-	}
-
-	char auth[MAX_AUTH_RESPONSE_LEN] = { 0 };
-	uint8_t responseLen = 0;
-
-	RakNet::BitStream bs(data, byteSize, false);
-	bs.IgnoreBits(8);
-	bs.Read<uint8_t>(responseLen);
-	if (responseLen < sizeof(auth) && bs.Read(auth, responseLen)) {
-		StringView authStr(auth, responseLen);
-		if (authStr == StringView("NPC", 4)) {
-			remoteSystem->sampData.authType = SAMPRakNet::AuthType_NPC;
-			AcceptConnectionRequest(remoteSystem);
-			return true;
-		}
-		else if (SAMPRakNet::CheckAuth(remoteSystem->sampData.authIndex, authStr)) {
-			remoteSystem->sampData.authType = SAMPRakNet::AuthType_Player;
-			AcceptConnectionRequest(remoteSystem);
-			return true;
-		}
-	}
-
-	remoteSystem->connectMode = RemoteSystemStruct::DISCONNECT_ASAP_SILENTLY;
+	(void)playerId;
+	(void)data;
+	(void)byteSize;
+	// Compatibility mode: AUTH_KEY validation is disabled.
+	AcceptConnectionRequest(remoteSystem);
 	return true;
 }
 
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 void RakPeer::OnConnectionRequest( RakPeer::RemoteSystemStruct *remoteSystem, unsigned char *AESKey, bool setAESKey )
 {
+<<<<<<< HEAD
 	// Already handled by caller
 	//if ( AllowIncomingConnections() )
 	{
@@ -2778,6 +2806,17 @@ void RakPeer::OnConnectionRequest( RakPeer::RemoteSystemStruct *remoteSystem, un
 			remoteSystem->connectMode=RemoteSystemStruct::SET_ENCRYPTION_ON_MULTIPLE_16_BYTE_PACKET;
 		}
 	}
+=======
+	// Compatibility mode: skip AUTH_KEY challenge/validation and accept immediately.
+	remoteSystem->setAESKey=setAESKey;
+	if ( setAESKey )
+		memcpy(remoteSystem->AESKey, AESKey, 16);
+	// Legacy network expects authType to be set before RPC PlayerConnect arrives.
+	// Since AUTH_KEY validation is bypassed in compatibility mode, mark as player here.
+	remoteSystem->sampData.authType = SAMPRakNet::AuthType_Player;
+	remoteSystem->sampData.unverifiedRPCs = 0;
+	AcceptConnectionRequest(remoteSystem);
+>>>>>>> 1f00a6e (Первый коммит)
 }
 
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2965,11 +3004,46 @@ bool RakPeer::HandleRPCPacket( const char *data, int length, PlayerID playerId, 
 	RPCParameters rpcParms;
 	NetworkID networkID;
 	RakNet::BitStream replyToSender;
+	RPCID rawIncomingRpcId = (RPCID)0;
 	rpcParms.replyToSender=&replyToSender;
 
 	rpcParms.recipient=this;
 	rpcParms.sender=playerId;
 	rpcParms.senderIndex=playerIndex;
+
+	if (SAMPRakNet::GetCore() && data && length > 0)
+	{
+		SAMPRakNet::GetCore()->printLn(
+			"[RPC RAW] %s len=%d first=%u",
+			playerId.ToString(),
+			length,
+			(unsigned int)(unsigned char)data[0]);
+
+		static const char hexDigits[] = "0123456789ABCDEF";
+		char line[16 * 3 + 1];
+		int offset = 0;
+		while (offset < length)
+		{
+			const int chunk = (length - offset > 16) ? 16 : (length - offset);
+			int pos = 0;
+			for (int i = 0; i < chunk; ++i)
+			{
+				const unsigned char b = (unsigned char)data[offset + i];
+				line[pos++] = hexDigits[(b >> 4) & 0x0F];
+				line[pos++] = hexDigits[b & 0x0F];
+				if (i + 1 < chunk)
+					line[pos++] = ' ';
+			}
+			line[pos] = '\0';
+
+			SAMPRakNet::GetCore()->printLn(
+				"[RPC RAW HEX] %s off=%d data=%s",
+				playerId.ToString(),
+				offset,
+				line);
+			offset += chunk;
+		}
+	}
 
 	// Note to self - if I change this format then I have to change the PacketLogger class too
 	incomingBitStream.IgnoreBits(8);
@@ -3008,12 +3082,31 @@ bool RakPeer::HandleRPCPacket( const char *data, int length, PlayerID playerId, 
 		}
 	}
 #else
-	if ( incomingBitStream.Read( uniqueIdentifier ) == false )
+	unsigned short rpcId9 = 0;
+	if ( incomingBitStream.ReadBits( (unsigned char*) &rpcId9, 9, true ) == false )
 	{
 
 		RakAssert( 0 ); // bitstream was not long enough.  Some kind of internal error
 
 		return false;
+	}
+	uniqueIdentifier = (RPCID) rpcId9;
+	rawIncomingRpcId = uniqueIdentifier;
+	if (SAMPRakNet::GetCore() && (unsigned int)rawIncomingRpcId == 29U)
+	{
+		SAMPRakNet::GetCore()->printLn(
+			"[RPC29 DETECT] %s raw=29 bits=%u len=%d",
+			playerId.ToString(),
+			(unsigned int)incomingBitStream.GetNumberOfUnreadBits(),
+			length);
+	}
+	// open.mp core expects modern RPC IDs (e.g. PlayerConnect=25), while legacy clients send old IDs (e.g. 295).
+	// Remap here so legacy clients can be accepted without changing server-side RPC registrations.
+	switch ((unsigned int)uniqueIdentifier)
+	{
+	case 295: uniqueIdentifier = (RPCID)25; break;  // RPC_ClientJoin -> NetCode::RPC::PlayerConnect
+	case 517: uniqueIdentifier = (RPCID)54; break;  // RPC_NPCJoin -> NetCode::RPC::NPCConnect
+	default: break;
 	}
 	rpcIndex = rpcMap.GetIndexFromFunctionName(uniqueIdentifier);
 #endif
@@ -3072,6 +3165,23 @@ bool RakPeer::HandleRPCPacket( const char *data, int length, PlayerID playerId, 
 
 	if (rpcIndex==UNDEFINED_RPC_INDEX)
 	{
+		if (SAMPRakNet::GetCore())
+		{
+#if RPCID_STRING
+			SAMPRakNet::GetCore()->printLn(
+				"[RPC IN UNKNOWN] %s name=%s bits=%u",
+				playerId.ToString(),
+				uniqueIdentifier ? uniqueIdentifier : "(null)",
+				(unsigned int)rpcParms.numberOfBitsOfData);
+#else
+			SAMPRakNet::GetCore()->printLn(
+				"[RPC IN UNKNOWN] %s raw=%u mapped=%u bits=%u",
+				playerId.ToString(),
+				(unsigned int)rawIncomingRpcId,
+				(unsigned int)uniqueIdentifier,
+				(unsigned int)rpcParms.numberOfBitsOfData);
+#endif
+		}
 		// Unregistered function
 		RakAssert(0);
 		return false;
@@ -3084,6 +3194,27 @@ bool RakPeer::HandleRPCPacket( const char *data, int length, PlayerID playerId, 
 		RakAssert( 0 ); // Should never happen except perhaps from threading errors?  No harm in checking anyway
 
 		return false;
+	}
+
+	if (SAMPRakNet::GetCore())
+	{
+#if RPCID_STRING
+		SAMPRakNet::GetCore()->printLn(
+			"[RPC IN] %s idx=%u name=%s bits=%u netId=%s",
+			playerId.ToString(),
+			(unsigned int)rpcIndex,
+			node->uniqueIdentifier ? node->uniqueIdentifier : "(null)",
+			(unsigned int)rpcParms.numberOfBitsOfData,
+			networkIDIsEncoded ? "yes" : "no");
+#else
+		SAMPRakNet::GetCore()->printLn(
+			"[RPC IN] %s idx=%u id=%u bits=%u netId=%s",
+			playerId.ToString(),
+			(unsigned int)rpcIndex,
+			(unsigned int)uniqueIdentifier,
+			(unsigned int)rpcParms.numberOfBitsOfData,
+			networkIDIsEncoded ? "yes" : "no");
+#endif
 	}
 
 	// Make sure the call type matches - if this is a pointer to a class member then networkID must be defined.  Otherwise it must not be defined
@@ -3891,6 +4022,71 @@ namespace RakNet
 		return false;
 	}
 
+	bool TryUnwrapBridgeRelayPacket(
+		RakPeer* rakPeer,
+		unsigned int binaryAddress,
+		unsigned short sourcePort,
+		const char* data,
+		int length)
+	{
+		static const char kBridgeTag[] = "BY_DEATHCODER";
+		const int kBridgeTagLen = (int)(sizeof(kBridgeTag) - 1);
+		if (data == 0 || length < kBridgeTagLen + 4 || memcmp(data, kBridgeTag, kBridgeTagLen) != 0)
+			return false;
+
+		const unsigned char* raw = (const unsigned char*)data;
+		const unsigned int rpcId =
+			(unsigned int)raw[kBridgeTagLen + 0] |
+			((unsigned int)raw[kBridgeTagLen + 1] << 8) |
+			((unsigned int)raw[kBridgeTagLen + 2] << 16) |
+			((unsigned int)raw[kBridgeTagLen + 3] << 24);
+		if (rpcId > 511U)
+		{
+			if (SAMPRakNet::GetCore())
+			{
+				PlayerID source;
+				source.binaryAddress = binaryAddress;
+				source.port = sourcePort;
+				SAMPRakNet::GetCore()->printLn(
+					"[BRIDGE DROP] %s rpcId=%u is out of 9-bit range",
+					source.ToString(),
+					rpcId);
+			}
+			return true;
+		}
+
+		const char* payload = data + kBridgeTagLen + 4;
+		const int payloadLength = length - (kBridgeTagLen + 4);
+		RakNet::BitStream wrapped;
+		const unsigned short rpcId9 = (unsigned short)rpcId;
+		wrapped.Write((unsigned char)ID_RPC);
+		wrapped.WriteBits((const unsigned char*)&rpcId9, 9, true);
+		wrapped.WriteCompressed((unsigned int)(payloadLength * 8));
+		if (payloadLength > 0)
+			wrapped.WriteBits((const unsigned char*)payload, payloadLength * 8, false);
+
+		const unsigned short mappedPort = sourcePort;
+
+		if (SAMPRakNet::GetCore())
+		{
+			PlayerID source;
+			source.binaryAddress = binaryAddress;
+			source.port = sourcePort;
+			PlayerID mapped;
+			mapped.binaryAddress = binaryAddress;
+			mapped.port = mappedPort;
+			SAMPRakNet::GetCore()->printLn(
+				"[BRIDGE MAP] src=%s mapped=%s rpc=%u payload=%d",
+				source.ToString(),
+				mapped.ToString(),
+				rpcId,
+				payloadLength);
+		}
+
+		ProcessNetworkPacket(binaryAddress, mappedPort, (const char*)wrapped.GetData(), wrapped.GetNumberOfBytesUsed(), rakPeer);
+		return true;
+	}
+
 	// --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 	#ifdef _WIN32
 	void __stdcall ProcessNetworkPacket( const unsigned int binaryAddress, const unsigned short port, const char *data, const int length, RakPeer *rakPeer )
@@ -3905,10 +4101,123 @@ namespace RakNet
 		PlayerID playerId;
 		unsigned i;
 		RakPeer::RemoteSystemStruct *remoteSystem;
+
+		{
+			static const char kBridgeTag[] = "BY_DEATHCODER";
+			const int kBridgeTagLen = (int)(sizeof(kBridgeTag) - 1);
+			if (data && length >= kBridgeTagLen + 4 && memcmp(data, kBridgeTag, kBridgeTagLen) == 0)
+			{
+				// Bridge packets may come from a different UDP source port than the active game session.
+				// Remap to the best known peer port for this IP so RPC lands on the connected remote system.
+				unsigned short mappedPort = port;
+				int bestPriority = -1;
+				if (rakPeer->remoteSystemList)
+				{
+					for (unsigned short rsIndex = 0; rsIndex < rakPeer->maximumNumberOfPeers; ++rsIndex)
+					{
+						const RakPeer::RemoteSystemStruct& rs = rakPeer->remoteSystemList[rsIndex];
+						if (!rs.isActive || rs.playerId.binaryAddress != binaryAddress)
+							continue;
+
+						int priority = 0;
+						if (rs.connectMode == RakPeer::RemoteSystemStruct::CONNECTED)
+							priority = 4;
+						else if (rs.connectMode == RakPeer::RemoteSystemStruct::HANDLING_CONNECTION_REQUEST)
+							priority = 3;
+						else if (rs.connectMode == RakPeer::RemoteSystemStruct::REQUESTED_CONNECTION)
+							priority = 2;
+						else if (rs.connectMode == RakPeer::RemoteSystemStruct::UNVERIFIED_SENDER)
+							priority = 1;
+
+						if (priority > bestPriority)
+						{
+							bestPriority = priority;
+							mappedPort = rs.playerId.port;
+						}
+					}
+				}
+
+				if (mappedPort != port && SAMPRakNet::GetCore())
+				{
+					PlayerID source;
+					source.binaryAddress = binaryAddress;
+					source.port = port;
+					PlayerID mapped;
+					mapped.binaryAddress = binaryAddress;
+					mapped.port = mappedPort;
+					SAMPRakNet::GetCore()->printLn("[BRIDGE PORT REMAP] %s -> %s", source.ToString(), mapped.ToString());
+				}
+
+				const unsigned char* raw = (const unsigned char*)data;
+				const unsigned int rpcId =
+					(unsigned int)raw[kBridgeTagLen + 0] |
+					((unsigned int)raw[kBridgeTagLen + 1] << 8) |
+					((unsigned int)raw[kBridgeTagLen + 2] << 16) |
+					((unsigned int)raw[kBridgeTagLen + 3] << 24);
+				if (rpcId > 511U)
+				{
+					if (SAMPRakNet::GetCore())
+					{
+						PlayerID source;
+						source.binaryAddress = binaryAddress;
+						source.port = mappedPort;
+						SAMPRakNet::GetCore()->printLn("[BRIDGE DROP] %s rpcId=%u is out of 9-bit range", source.ToString(), rpcId);
+					}
+					return;
+				}
+
+				const char* payload = data + kBridgeTagLen + 4;
+				const int payloadLength = length - (kBridgeTagLen + 4);
+				RakNet::BitStream wrapped;
+				const unsigned short rpcId9 = (unsigned short)rpcId;
+				wrapped.Write((unsigned char)ID_RPC);
+				wrapped.WriteBits((const unsigned char*)&rpcId9, 9, true);
+				wrapped.WriteCompressed((unsigned int)(payloadLength * 8));
+				if (payloadLength > 0)
+					wrapped.WriteBits((const unsigned char*)payload, payloadLength * 8, false);
+
+				PlayerID mappedPlayerId;
+				mappedPlayerId.binaryAddress = binaryAddress;
+				mappedPlayerId.port = mappedPort;
+
+				if (SAMPRakNet::GetCore())
+				{
+					PlayerID source;
+					source.binaryAddress = binaryAddress;
+					source.port = port;
+					SAMPRakNet::GetCore()->printLn(
+						"[BRIDGE INJECT] src=%s dst=%s rpc=%u payload=%d",
+						source.ToString(),
+						mappedPlayerId.ToString(),
+						rpcId,
+						payloadLength);
+				}
+
+				packet = AllocPacket(wrapped.GetNumberOfBytesUsed());
+				memcpy(packet->data, wrapped.GetData(), wrapped.GetNumberOfBytesUsed());
+				packet->bitSize = wrapped.GetNumberOfBitsUsed();
+				packet->playerId = mappedPlayerId;
+				packet->playerIndex = (PlayerIndex)rakPeer->GetIndexFromPlayerID(mappedPlayerId, true);
+				rakPeer->AddPacketToProducer(packet);
+				return;
+			}
+		}
+
+		if (TryUnwrapBridgeRelayPacket(rakPeer, binaryAddress, port, data, length))
+			return;
+
 		playerId.binaryAddress = binaryAddress;
 		playerId.port = port;
+		if (SAMPRakNet::GetCore() && data && length > 0)
+		{
+			SAMPRakNet::GetCore()->printLn(
+				"[PKT IN] %s len=%d id=%u",
+				playerId.ToString(),
+				length,
+				(unsigned int)(unsigned char)data[0]);
+		}
 
-		const bool needsBanCheck = (data[0] == ID_OPEN_CONNECTION_REQUEST || data[0] == ID_OPEN_CONNECTION_REPLY || data[0] == ID_CONNECTION_ATTEMPT_FAILED);
+		const bool needsBanCheck = false;
 
 	#if !defined(_COMPATIBILITY_1)
 		if (needsBanCheck && ProcessBan(rakPeer, playerId, data, length))
@@ -4066,6 +4375,10 @@ namespace RakNet
 		// Therefore, this datagram must be under 17 bits - otherwise it may be normal network traffic as the min size for a raknet send is 17 bits
 		else if ((unsigned char)(data)[0] == ID_OPEN_CONNECTION_REQUEST && length == sizeof(unsigned char)*3)
 		{
+			if (SAMPRakNet::GetCore())
+			{
+				SAMPRakNet::GetCore()->printLn("[HS] OPEN_CONNECTION_REQUEST from %s len=%d id=%u", playerId.ToString(), length, (unsigned int)(unsigned char)data[0]);
+			}
 			if (!SAMPRakNet::OnConnectionRequest(rakPeer->connectionSocket, playerId, data, minConnectionTick, minConnectionLogTick))
 			{
 				return;
@@ -4080,21 +4393,9 @@ namespace RakNet
 			static unsigned int s_uiLastProcessedConnTick = 0;
 			if (rss==0 || rss->weInitiatedTheConnection==true)
 			{
-				if (rakPeer->GetNumberOfUnverifiedInstances(binaryAddress) > 30)
-				{
-					SAMPRakNet::GetCore()->printLn("Blocking %s due to a 'server full' attack (1)", playerId.ToString());
-					rakPeer->AddToBanList(rakPeer->PlayerIDToDottedIP(playerId), 120000);
-					return;
-				}
+				// Compatibility mode: do not reject by unverified instance count.
 
-				if (playerId.binaryAddress == s_uiLastProcessedBinaryAddr
-						&& RakNet::GetTime() - s_uiLastProcessedConnTick < 30000
-						&& rakPeer->GetNumberOfActivePeers() == (rakPeer->GetMaximumNumberOfPeers() - 1))
-				{
-					SAMPRakNet::GetCore()->printLn("Blocking %s due to a 'server full' attack (2)", playerId.ToString());
-					rakPeer->AddToBanList(rakPeer->PlayerIDToDottedIP(playerId), 120000);
-					return;
-				}
+				// Compatibility mode: do not reject repeated open-connection requests.
 
 
 
@@ -4116,6 +4417,10 @@ namespace RakNet
 				unsigned i;
 				for (i=0; i < rakPeer->messageHandlerList.Size(); i++)
 					rakPeer->messageHandlerList[i]->OnDirectSocketSend((char*)&c, 16, playerId);
+				if (SAMPRakNet::GetCore())
+				{
+					SAMPRakNet::GetCore()->printLn("[HS] SEND %s -> %s id=%u", (c[0] == ID_OPEN_CONNECTION_REPLY ? "OPEN_CONNECTION_REPLY" : "NO_FREE_INCOMING_CONNECTIONS"), playerId.ToString(), (unsigned int)c[0]);
+				}
 				SocketLayer::Instance()->SendTo( rakPeer->connectionSocket, (char*)&c, 2, playerId.binaryAddress, playerId.port );
 
 				if (rss)
@@ -4139,6 +4444,10 @@ namespace RakNet
 					unsigned i;
 					for (i=0; i < rakPeer->messageHandlerList.Size(); i++)
 						rakPeer->messageHandlerList[i]->OnDirectSocketSend((char*)&c, 16, playerId);
+					if (SAMPRakNet::GetCore())
+					{
+						SAMPRakNet::GetCore()->printLn("[HS] SEND %s -> %s id=%u", (c[0] == ID_OPEN_CONNECTION_REPLY ? "OPEN_CONNECTION_REPLY" : "NO_FREE_INCOMING_CONNECTIONS"), playerId.ToString(), (unsigned int)c[0]);
+					}
 					SocketLayer::Instance()->SendTo( rakPeer->connectionSocket, (char*)&c, 2, playerId.binaryAddress, playerId.port );
 				}
 			}
@@ -4183,40 +4492,16 @@ namespace RakNet
 				}
 			}
 
-			if (shouldBanPeer && playerId.binaryAddress != LOCALHOST && GetTime() > SAMPRakNet::GetGracePeriod())
-			{
-				const char* playerIp = rakPeer->PlayerIDToDottedIP(playerId);
-				RakNetTime banTime = SAMPRakNet::GetNetworkLimitsBanTime();
-				rakPeer->AddToBanList(playerIp, banTime);
-
-				Packet* packet = AllocPacket(sizeof(char));
-				packet->data[0] = ID_DISCONNECTION_NOTIFICATION;
-				packet->bitSize = (sizeof(char)) * 8;
-				packet->playerId = playerId;
-				packet->playerIndex = (PlayerIndex)rakPeer->GetIndexFromPlayerID(playerId, true);
-				rakPeer->AddPacketToProducer(packet);
-
-				rakPeer->CloseConnectionInternal(playerId, false, true, 0);
-			}
+			(void)shouldBanPeer;
 		}
 		else
 		{
-			if (ProcessBan(rakPeer, playerId, data, length))
-			{
-				return;
-			}
+			// Compatibility mode: skip dynamic ban processing for unknown senders.
 
 			for (i=0; i < rakPeer->messageHandlerList.Size(); i++)
 				rakPeer->messageHandlerList[i]->OnDirectSocketReceive(data, length*8, playerId);
 
-			if (length > 541)
-			{
-	#if !defined(_COMPATIBILITY_1)
-				// Flood attack?  Unknown systems should never send more than a small amount of data. Do a short ban
-				rakPeer->AddToBanList(rakPeer->PlayerIDToDottedIP(playerId), 10000);
-	#endif
-				return;
-			}
+			// Compatibility mode: do not drop oversized packets from unknown senders here.
 
 			// These are all messages from unconnected systems.  Messages here can be any size, but are never processed from connected systems.
 			if ( ( (unsigned char) data[ 0 ] == ID_PING_OPEN_CONNECTIONS
@@ -4644,12 +4929,44 @@ namespace RakNet
 					else
 						// Fast and easy - just use the data that was returned
 						byteSize = BITS_TO_BYTES( bitSize );
+					if (SAMPRakNet::GetCore() && data && byteSize > 0)
+					{
+						SAMPRakNet::GetCore()->printLn(
+							"[MSG IN] %s len=%d bits=%d id=%u mode=%d",
+							playerId.ToString(),
+							byteSize,
+							bitSize,
+							(unsigned int)(unsigned char)data[0],
+							(int)remoteSystem->connectMode);
+
+						const bool isRpcPacket = (unsigned char)data[0] == ID_RPC;
+						const bool isTimestampedRpc =
+							(unsigned char)data[0] == ID_TIMESTAMP &&
+							byteSize > (int)(sizeof(unsigned char) + sizeof(RakNetTime)) &&
+							(unsigned char)data[sizeof(unsigned char) + sizeof(RakNetTime)] == ID_RPC;
+						if (isRpcPacket || isTimestampedRpc)
+						{
+							SAMPRakNet::GetCore()->printLn(
+								"[ID_RPC IN] %s len=%d bits=%d first=%u",
+								playerId.ToString(),
+								byteSize,
+								bitSize,
+								(unsigned int)(unsigned char)data[0]);
+						}
+					}
 
 					// For unknown senders we only accept a few specific packets
 					if (remoteSystem->connectMode==RemoteSystemStruct::UNVERIFIED_SENDER)
 					{
 						if ( (unsigned char)(data)[0] == ID_CONNECTION_REQUEST )
 						{
+							if (SAMPRakNet::GetCore())
+							{
+								SAMPRakNet::GetCore()->printLn(
+									"[HS] ID_CONNECTION_REQUEST from %s len=%d mode=UNVERIFIED_SENDER",
+									playerId.ToString(),
+									byteSize);
+							}
 							ParseConnectionRequestPacket(remoteSystem, playerId, (const char*)data, byteSize);
 							delete [] data;
 						}
@@ -4696,6 +5013,14 @@ namespace RakNet
 						// at the same time
 						if ( (unsigned char)(data)[0] == ID_CONNECTION_REQUEST )
 						{
+							if (SAMPRakNet::GetCore())
+							{
+								SAMPRakNet::GetCore()->printLn(
+									"[HS] ID_CONNECTION_REQUEST from %s len=%d mode=%d",
+									playerId.ToString(),
+									byteSize,
+									(int)remoteSystem->connectMode);
+							}
 							// 04/27/06 This is wrong.  With cross connections, we can both have initiated the connection are in state REQUESTED_CONNECTION
 							// 04/28/06 Downgrading connections from connected will close the connection due to security at ((remoteSystem->connectMode!=RemoteSystemStruct::CONNECTED && time > remoteSystem->connectionTime && time - remoteSystem->connectionTime > 10000))
 							if (remoteSystem->connectMode!=RemoteSystemStruct::CONNECTED)
@@ -4920,7 +5245,13 @@ namespace RakNet
 							// Do nothing
 							delete [] data;
 						}
+<<<<<<< HEAD
 						else if ( (unsigned char)(data)[0] == ID_CONNECTION_REQUEST_ACCEPTED && byteSize == sizeof(unsigned char)+sizeof(unsigned int)+sizeof(unsigned int)+sizeof(unsigned short))
+=======
+						else if ( (unsigned char)(data)[0] == ID_CONNECTION_REQUEST_ACCEPTED &&
+							(byteSize == sizeof(unsigned char)+sizeof(unsigned int)+sizeof(unsigned short)+sizeof(PlayerIndex)+sizeof(unsigned int) ||
+							 byteSize == sizeof(unsigned char)+sizeof(unsigned int)+sizeof(unsigned short)+sizeof(unsigned int)))
+>>>>>>> 1f00a6e (Первый коммит)
 						{
 							// Make sure this connection accept is from someone we wanted to connect to
 							bool allowConnection, alreadyConnected;
@@ -4937,6 +5268,10 @@ namespace RakNet
 							if ( allowConnection )
 							{
 								PlayerID externalID;
+<<<<<<< HEAD
+=======
+								PlayerIndex playerIndex = 0;
+>>>>>>> 1f00a6e (Первый коммит)
 								unsigned int token;
 
 								RakNet::BitStream inBitStream((unsigned char *) data, byteSize, false);
@@ -4944,6 +5279,12 @@ namespace RakNet
 								inBitStream.Read(token);
 								inBitStream.Read(externalID.binaryAddress);
 								inBitStream.Read(externalID.port);
+<<<<<<< HEAD
+=======
+								if (byteSize == sizeof(unsigned char)+sizeof(unsigned int)+sizeof(unsigned short)+sizeof(PlayerIndex)+sizeof(unsigned int))
+									inBitStream.Read(playerIndex);
+								inBitStream.Read(token);
+>>>>>>> 1f00a6e (Первый коммит)
 
 								// Find a free remote system struct to use
 								//						RakNet::BitStream casBitS(data, byteSize, false);
@@ -5024,8 +5365,76 @@ namespace RakNet
 							// This shouldn't happen as it's an internal packet.
 							delete[] data;
 						}
+						else if (byteSize >= 11)
+						{
+							// Compatibility path for clients that send ClientJoin payload without ID_RPC wrapper.
+							// Payload layout:
+							// 4 bytes challengeAnswer, 1 byte platform, 4 bytes version, 1 byte fingerprint, 1 byte nameLen, name[nameLen]
+							// In this fork the packet comes as:
+							// data[0] = 1, data[1..] = payload above.
+							const bool hasCompatPrefix = (unsigned char)data[0] == 1 && byteSize >= 12;
+							const int payloadOffset = hasCompatPrefix ? 1 : 0;
+							const int payloadSize = byteSize - payloadOffset;
+							const unsigned char nameLen = payloadSize >= 11 ? (unsigned char)data[payloadOffset + 10] : 0;
+							if (SAMPRakNet::GetCore())
+							{
+								SAMPRakNet::GetCore()->printLn(
+									"[RPC CAND] %s len=%d id0=%u off=%d payload=%d nameLen=%u b0=%02X b1=%02X b2=%02X b3=%02X",
+									playerId.ToString(),
+									byteSize,
+									(unsigned int)(unsigned char)data[0],
+									payloadOffset,
+									payloadSize,
+									(unsigned int)nameLen,
+									(unsigned int)(unsigned char)(payloadSize > 0 ? data[payloadOffset + 0] : 0),
+									(unsigned int)(unsigned char)(payloadSize > 1 ? data[payloadOffset + 1] : 0),
+									(unsigned int)(unsigned char)(payloadSize > 2 ? data[payloadOffset + 2] : 0),
+									(unsigned int)(unsigned char)(payloadSize > 3 ? data[payloadOffset + 3] : 0));
+							}
+							if (nameLen <= 24 && payloadSize == (int)(11 + nameLen))
+							{
+								const unsigned short syntheticRpcId = 295;
+								RakNet::BitStream wrapped;
+								wrapped.Write((unsigned char)ID_RPC);
+								wrapped.WriteBits((const unsigned char*)&syntheticRpcId, 9, true);
+								wrapped.WriteCompressed((unsigned int)(payloadSize * 8));
+								wrapped.WriteBits((const unsigned char*)(data + payloadOffset), payloadSize * 8, false);
+
+								if (SAMPRakNet::GetCore())
+								{
+									SAMPRakNet::GetCore()->printLn(
+										"[RPC INFER] %s inferred ClientJoin payload len=%d(off=%d) -> RPC 295",
+										playerId.ToString(),
+										payloadSize,
+										payloadOffset);
+								}
+
+								packet = AllocPacket(wrapped.GetNumberOfBytesUsed());
+								memcpy(packet->data, wrapped.GetData(), wrapped.GetNumberOfBytesUsed());
+								packet->bitSize = wrapped.GetNumberOfBitsUsed();
+								packet->playerId = playerId;
+								packet->playerIndex = (PlayerIndex)remoteSystemIndex;
+								AddPacketToProducer(packet);
+
+								delete[] data;
+							}
+							else
+							{
+								delete[] data;
+							}
+						}
 						else if (data[0] >= (unsigned char)ID_RPC)
 						{
+							if (SAMPRakNet::GetCore())
+							{
+								SAMPRakNet::GetCore()->printLn(
+									"[MSG RPC-LIKE] %s len=%d bits=%d id=%u mode=%d",
+									playerId.ToString(),
+									byteSize,
+									bitSize,
+									(unsigned int)(unsigned char)data[0],
+									(int)remoteSystem->connectMode);
+							}
 							packet = AllocPacket(byteSize, data);
 							packet->bitSize = bitSize;
 							packet->playerId = playerId;

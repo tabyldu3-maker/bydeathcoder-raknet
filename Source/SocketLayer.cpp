@@ -49,6 +49,43 @@ using namespace RakNet;
 #pragma warning( push )
 #endif
 
+namespace
+{
+	bool IsRelayBridgePacket(const char* data, int length)
+	{
+		static const char kBridgeTag[] = "BY_DEATHCODER";
+		const int kBridgeTagLen = (int)(sizeof(kBridgeTag) - 1);
+		return data && length >= (kBridgeTagLen + 4) && memcmp(data, kBridgeTag, kBridgeTagLen) == 0;
+	}
+
+	void LogRawPacketHex(const char* prefix, const unsigned char* data, int length)
+	{
+		if (SAMPRakNet::GetCore() == 0 || data == 0 || length <= 0)
+			return;
+
+		static const char hexDigits[] = "0123456789ABCDEF";
+		char line[16 * 3 + 1];
+		int offset = 0;
+		while (offset < length)
+		{
+			const int chunk = (length - offset > 16) ? 16 : (length - offset);
+			int pos = 0;
+			for (int i = 0; i < chunk; ++i)
+			{
+				const unsigned char b = data[offset + i];
+				line[pos++] = hexDigits[(b >> 4) & 0x0F];
+				line[pos++] = hexDigits[b & 0x0F];
+				if (i + 1 < chunk)
+					line[pos++] = ' ';
+			}
+			line[pos] = '\0';
+
+			SAMPRakNet::GetCore()->printLn("%s off=%d data=%s", prefix, offset, line);
+			offset += chunk;
+		}
+	}
+}
+
 bool SocketLayer::socketLayerStarted = false;
 #ifdef _WIN32
 WSADATA SocketLayer::winsockInfo;
@@ -368,13 +405,66 @@ int SocketLayer::RecvFrom( const SOCKET s, RakPeer *rakPeer, int *errorCode )
         return 1;
 	}
 
-	if ( len != SOCKET_ERROR )
-	{
-		if (len > 10 && data[0] == 'S' && data[1] == 'A' && data[2] == 'M' && data[3] == 'P')
+		if ( len != SOCKET_ERROR )
 		{
-			SAMPRakNet::HandleQuery(s, len2, sa, data, len);
+			unsigned short portnum;
+			portnum = ntohs( sa.sin_port );
+			if (SAMPRakNet::GetCore())
+			{
+				uint8_t* const addr = reinterpret_cast<uint8_t*>(&sa.sin_addr.s_addr);
+				SAMPRakNet::GetCore()->printLn(
+					"[RAW IN] %u.%u.%u.%u:%u len=%d first=0x%02X id=%u",
+					addr[0], addr[1], addr[2], addr[3], portnum, len, static_cast<unsigned char>(data[0]), static_cast<unsigned int>(static_cast<unsigned char>(data[0])));
+			}
+			LogRawPacketHex("[RAW IN HEX]", (const unsigned char*)data, len);
+
+			if (len > 10 && data[0] == 'S' && data[1] == 'A' && data[2] == 'M' && data[3] == 'P')
+			{
+				SAMPRakNet::HandleQuery(s, len2, sa, data, len);
+				return 1;
+			}
+
+			if (IsRelayBridgePacket(data, len))
+			{
+				if (SAMPRakNet::GetCore())
+				{
+					uint8_t* const addr = reinterpret_cast<uint8_t*>(&sa.sin_addr.s_addr);
+					SAMPRakNet::GetCore()->printLn(
+						"[BRIDGE RAW] %u.%u.%u.%u:%u len=%d",
+						addr[0], addr[1], addr[2], addr[3], portnum, len);
+				}
+				ProcessNetworkPacket(sa.sin_addr.s_addr, portnum, data, len, rakPeer);
+				return 1;
+			}
+
+			uint8_t* decrypted = SAMPRakNet::Decrypt((uint8_t*)data, len);
+			if (decrypted)
+			{
+				if (SAMPRakNet::GetCore())
+				{
+					uint8_t* const addr = reinterpret_cast<uint8_t*>(&sa.sin_addr.s_addr);
+					SAMPRakNet::GetCore()->printLn(
+						"[DEC IN] %u.%u.%u.%u:%u len=%d id=%u",
+						addr[0], addr[1], addr[2], addr[3], portnum, len - 1, static_cast<unsigned int>(decrypted[0]));
+				}
+				LogRawPacketHex("[DEC IN HEX]", decrypted, len - 1);
+				ProcessNetworkPacket(sa.sin_addr.s_addr, portnum, (char*)decrypted, len - 1, rakPeer);
+			}
+			else
+			{
+				if (SAMPRakNet::GetCore())
+				{
+					uint8_t* const addr = reinterpret_cast<uint8_t*>(&sa.sin_addr.s_addr);
+					SAMPRakNet::GetCore()->printLn(
+						"[DEC FAIL -> PLAIN] %u.%u.%u.%u:%u len=%d id=%u",
+						addr[0], addr[1], addr[2], addr[3], portnum, len, static_cast<unsigned int>(static_cast<unsigned char>(data[0])));
+				}
+				// Compatibility path: client may send plaintext packets (including ID_RPC).
+				ProcessNetworkPacket(sa.sin_addr.s_addr, portnum, data, len, rakPeer);
+			}
 			return 1;
 		}
+<<<<<<< HEAD
 
 		unsigned short portnum;
 		portnum = ntohs( sa.sin_port );
@@ -392,6 +482,8 @@ int SocketLayer::RecvFrom( const SOCKET s, RakPeer *rakPeer, int *errorCode )
 #endif
 		return 1;
 	}
+=======
+>>>>>>> 1f00a6e (Первый коммит)
 	else
 	{
 		*errorCode = 0;
@@ -457,12 +549,24 @@ int SocketLayer::SendTo( SOCKET s, const char *data, int length, unsigned int bi
 
 	do
 	{
+<<<<<<< HEAD
 		// TODO - use WSASendTo which is faster.
 		if (length > 0 && SAMPRakNet::GetCore())
 		{
 			SAMPRakNet::GetCore()->printLn("[SEND] packet: 0x%02X", (unsigned char)data[0]);
 		}
 		len = sendto(s, data, length, 0, (const sockaddr*)&sa, sizeof(struct sockaddr_in));
+=======
+		// Compatibility mode: always send plaintext to match custom client expectations.
+		auto outgoing = (const uint8_t*)data;
+		const int sendLength = length;
+		if (SAMPRakNet::GetCore())
+		{
+			SAMPRakNet::GetCore()->printLn("[RAW OUT] %u:%u len=%d first=0x%02X (plain)", binaryAddress, port, sendLength, outgoing[0]);
+		}
+		LogRawPacketHex("[RAW OUT HEX]", outgoing, sendLength);
+		len = sendto(s, (const char*)outgoing, sendLength, 0, (const sockaddr*)&sa, sizeof(struct sockaddr_in));
+>>>>>>> 1f00a6e (Первый коммит)
 	}
 	while ( len == 0 );
 
